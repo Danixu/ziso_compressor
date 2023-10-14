@@ -6,11 +6,15 @@ static struct option long_options[] = {
     {"input", required_argument, NULL, 'i'},
     {"output", required_argument, NULL, 'o'},
     {"compression", required_argument, NULL, 'c'},
+    {"lz4hc", required_argument, NULL, 'l'},
     {"block-size", required_argument, NULL, 'b'},
     {"force", required_argument, NULL, 'f'},
     {"keep-output", required_argument, NULL, 'k'},
     {"help", required_argument, NULL, 'h'},
     {NULL, 0, NULL, 0}};
+
+uint8_t lastProgress = 100; // Force at 0% of progress
+uint8_t lastRatio = 0;
 
 int main(int argc, char **argv)
 {
@@ -29,8 +33,7 @@ int main(int argc, char **argv)
     // Other Variables
     uint64_t inputSize;
     uint32_t blocksNumber;
-    uint16_t headerSize;
-    char *fileHeaderC = nullptr;
+    uint32_t headerSize;
     uint64_t blockStartPosition = 0;
     uint64_t blockRealStartPosition = 0;
 
@@ -54,7 +57,8 @@ int main(int argc, char **argv)
     {
         fprintf(stderr, "ERROR: input file is required.\n");
         print_help();
-        return 1;
+        return_code = 1;
+        goto exit;
     }
 
     // Open the input file
@@ -66,90 +70,174 @@ int main(int argc, char **argv)
         if (!inFile.read(&dummy, 0))
         {
             fprintf(stderr, "ERROR: input file cannot be opened.\n");
-            return 1;
+            return_code = 1;
+            goto exit;
         }
     }
 
-    outFile.open("test.zso", std::ios::out | std::ios::binary | std::ios::trunc);
-
-    // Get the input size
-    inFile.seekg(0, std::ios_base::end);
-    inputSize = inFile.tellg();
-    inFile.seekg(0, std::ios_base::beg);
-
-    // Get the total blocks
-    blocksNumber = ceil((float)inputSize / settings.blockSize) + 1;
-    // Calculate the header size
-    headerSize = 0x18 + (blocksNumber * sizeof(uint32_t));
-
-    // Set the header input size and block size
-    fileHeader.uncompressedSize = inputSize;
-    fileHeader.blockSize = settings.blockSize;
-
-    // Set shift depending of the input size. Bigger shift means more waste.
-    if (inputSize > (0x3FFFFFFFF - headerSize))
+    // Check if the file is an ECM3 File
     {
-        // Size is bigger than 17.179.869.183 (16GB-32GB). PS2 games are that big.
-        fileHeader.indexShift = 4;
-    }
-    if (inputSize > (0x1FFFFFFFF - headerSize))
-    {
-        // Size is bigger than 8.589.934.591 (8GB-16GB)
-        fileHeader.indexShift = 3;
-    }
-    else if (inputSize > (0xFFFFFFFF - headerSize))
-    {
-        // Size is bigger than 4.294.967.295 (4GB-8GB)
-        fileHeader.indexShift = 2;
-    }
-    else if (inputSize > (0x7FFFFFFF - headerSize))
-    {
-        // Size is bigger than 2.147.483.647 (2GB-4GB)
-        fileHeader.indexShift = 1;
-    }
-    // Files with less than 2GB doesn't need to shift.
+        char file_format[5] = {0};
+        inFile.read(file_format, 4);
 
-    // Convert and write the header
-    fileHeaderC = new char(sizeof(fileHeader));
-    memcpy(fileHeaderC, &fileHeader, sizeof(fileHeader));
-
-    outFile.write(fileHeaderC, sizeof(fileHeader));
-    delete[] fileHeaderC;
-
-    // Reserve the blocks index space
-    blocks.resize(blocksNumber, 0);
-
-    outFile.write((const char *)blocks.data(), blocksNumber * sizeof(uint32_t));
-
-    readBuffer.resize(settings.blockSize, 0);
-    writeBuffer.resize(settings.blockSize, 0);
-
-    for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
-    {
-        uint64_t blockStartPosition = outFile.tellp();
-        uint64_t blockRealStartPosition = blockStartPosition;
-
-        uint64_t toRead = settings.blockSize;
-        uint64_t leftInFile = inputSize - inFile.tellg();
-        if (leftInFile < toRead)
+        if (
+            file_format[0] == 'Z' &&
+            file_format[1] == 'I' &&
+            file_format[2] == 'S' &&
+            file_format[3] == 'O')
         {
-            toRead = leftInFile;
-        }
-
-        inFile.read(readBuffer.data(), toRead);
-
-        int compressedBytes = LZ4_compress_fast(readBuffer.data(), writeBuffer.data(), toRead, writeBuffer.size(), 1024);
-
-        if (compressedBytes > 0)
-        {
-            outFile.write(writeBuffer.data(), compressedBytes);
+            // File is a ZISO file, so will be decompressed
+            fprintf(stdout, "ZISO file detected. Decompressing...\n");
+            settings.compress = false;
         }
         else
         {
-            outFile.write(readBuffer.data(), settings.blockSize);
+            fprintf(stdout, "ISO file detected. Compressing to ZISO\n");
+        }
+    }
+
+    // If no output filename was provided, generate it using the input filename
+    if (settings.outputFile.empty())
+    {
+        // Remove the extensión
+        std::string rawName = settings.inputFile.substr(0, settings.inputFile.find_last_of("."));
+
+        // Input file will be decoded, so ecm2 extension must be removed (if exists)
+        if (settings.compress)
+        {
+            settings.outputFile = rawName + ".zso";
+        }
+        else
+        {
+            settings.outputFile = rawName + ".iso";
+        }
+    }
+
+    // Check if output file exists only if force_rewrite is false
+    if (settings.overwrite == false)
+    {
+        char dummy;
+        outFile.open(settings.outputFile.c_str(), std::ios::in | std::ios::binary);
+        if (outFile.read(&dummy, 0))
+        {
+            fprintf(stderr, "ERROR: Cowardly refusing to replace output file. Use the -f/--force-rewrite options to force it.\n");
+            settings.keepOutput = true;
+            return_code = 1;
+            goto exit;
+        }
+        outFile.close();
+    }
+
+    // Open the output file in replace mode
+    outFile.open(settings.outputFile.c_str(), std::ios::out | std::ios::binary);
+    // Check if file was oppened correctly.
+    if (!outFile.good())
+    {
+        fprintf(stderr, "ERROR: output file cannot be opened.\n");
+        return_code = 1;
+        goto exit;
+    }
+
+    if (settings.compress)
+    {
+        // Get the input size
+        inFile.seekg(0, std::ios_base::end);
+        inputSize = inFile.tellg();
+        inFile.seekg(0, std::ios_base::beg);
+
+        // Get the total blocks
+        blocksNumber = ceil((float)inputSize / settings.blockSize) + 1;
+        // Calculate the header size
+        headerSize = 0x18 + (blocksNumber * sizeof(uint32_t));
+
+        // Set the header input size and block size
+        fileHeader.uncompressedSize = inputSize;
+        fileHeader.blockSize = settings.blockSize;
+
+        // Set shift depending of the input size. Bigger shift means more waste.
+        if (inputSize > (0x3FFFFFFFF - headerSize))
+        {
+            // Size is bigger than 17.179.869.183 (16GB-32GB). PS2 games are that big.
+            fileHeader.indexShift = 4;
+        }
+        if (inputSize > (0x1FFFFFFFF - headerSize))
+        {
+            // Size is bigger than 8.589.934.591 (8GB-16GB)
+            fileHeader.indexShift = 3;
+        }
+        else if (inputSize > (0xFFFFFFFF - headerSize))
+        {
+            // Size is bigger than 4.294.967.295 (4GB-8GB)
+            fileHeader.indexShift = 2;
+        }
+        else if (inputSize > (0x7FFFFFFF - headerSize))
+        {
+            // Size is bigger than 2.147.483.647 (2GB-4GB)
+            fileHeader.indexShift = 1;
+        }
+        // Files with less than 2GB doesn't need to shift.
+
+        outFile.write(reinterpret_cast<const char *>(&fileHeader), sizeof(fileHeader));
+
+        // Reserve the blocks index space
+        blocks.resize(blocksNumber, 0);
+
+        outFile.write((const char *)blocks.data(), blocksNumber * sizeof(uint32_t));
+
+        readBuffer.resize(settings.blockSize, 0);
+        writeBuffer.resize(settings.blockSize, 0);
+
+        for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
+        {
+            uint64_t blockStartPosition = outFile.tellp();
+            uint64_t blockRealStartPosition = blockStartPosition;
+
+            uint64_t toRead = settings.blockSize;
+            uint64_t leftInFile = inputSize - inFile.tellg();
+            if (leftInFile < toRead)
+            {
+                toRead = leftInFile;
+            }
+
+            inFile.read(readBuffer.data(), toRead);
+
+            bool uncompressed = false;
+            int compressedBytes = compress_block(
+                readBuffer.data(),
+                toRead,
+                writeBuffer.data(),
+                writeBuffer.size(),
+                uncompressed,
+                settings);
+
+            if (compressedBytes > 0)
+            {
+                outFile.write(writeBuffer.data(), compressedBytes);
+            }
+            else
+            {
+                fprintf(stderr, "ERROR: There was an error compressing the source file.\n");
+                return_code = 1;
+                goto exit;
+            }
+
+            blocks[currentBlock] = pos_to_index(blockRealStartPosition, fileHeader.indexShift, uncompressed);
+
+            if (blockRealStartPosition > blockStartPosition)
+            {
+                for (uint64_t i = blockStartPosition; i <= blockRealStartPosition; i++)
+                {
+                    outFile.write("\0", 1);
+                }
+            }
+
+            progress(inFile.tellg(), inputSize, (uint64_t)outFile.tellp() - headerSize);
         }
 
-        blocks[currentBlock] = pos_to_index(blockRealStartPosition, fileHeader.indexShift, compressedBytes == 0);
+        // Set the eof position block
+        blockStartPosition = outFile.tellp();
+        blockRealStartPosition = blockStartPosition;
+        blocks[blocksNumber - 1] = pos_to_index(blockRealStartPosition, fileHeader.indexShift, false);
 
         if (blockRealStartPosition > blockStartPosition)
         {
@@ -158,25 +246,15 @@ int main(int argc, char **argv)
                 outFile.write("\0", 1);
             }
         }
+
+        // Write the blocks index
+        outFile.seekp(0x18);
+        outFile.write((const char *)blocks.data(), blocksNumber * sizeof(uint32_t));
     }
 
-    // Set the eof position block
-    blockStartPosition = outFile.tellp();
-    blockRealStartPosition = blockStartPosition;
-    blocks[blocksNumber - 1] = pos_to_index(blockRealStartPosition, fileHeader.indexShift, false);
-
-    if (blockRealStartPosition > blockStartPosition)
+    else
     {
-        for (uint64_t i = blockStartPosition; i <= blockRealStartPosition; i++)
-        {
-            fprintf(stdout, "Syncing, position...");
-            outFile.write("\0", 1);
-        }
     }
-
-    // Write the blocks index
-    outFile.seekp(0x18);
-    outFile.write((const char *)blocks.data(), blocksNumber * sizeof(uint32_t));
 
 exit:
     if (inFile.is_open())
@@ -217,13 +295,42 @@ exit:
     return return_code;
 }
 
-uint32_t compress_block(char *dst, uint32_t dstSize, const char *src, uint32_t srcSize, bool &compressed, opt settings)
+uint32_t compress_block(
+    const char *src,
+    uint32_t srcSize,
+    char *dst,
+    uint32_t dstSize,
+    bool &uncompressed,
+    opt settings)
 {
     // Try to compress the data into the dst buffer
     uint32_t outSize = 0;
     if (settings.lz4hc)
     {
-        // LZ4_compressHC_continue();
+        outSize = LZ4_compress_HC(src, dst, srcSize, dstSize, settings.compressionLevel);
+    }
+    else
+    {
+        outSize = LZ4_compress_fast(src, dst, srcSize, dstSize, lz4_compression_level[settings.compressionLevel - 1]);
+    }
+
+    // If the block was not compressed because a buffer space problem, or the output is bigger than input
+    //
+    if (outSize == 0 || outSize > srcSize)
+    {
+        if (dstSize < srcSize)
+        {
+            // The block cannot be compressed and the raw data doesn't fit the dst buffer
+            return 0;
+        }
+        uncompressed = true;
+        std::memcpy(dst, src, srcSize);
+        return srcSize;
+    }
+    else
+    {
+        uncompressed = false;
+        return outSize;
     }
 }
 
@@ -266,7 +373,7 @@ int get_options(
 
     std::string optarg_s;
 
-    while ((ch = getopt_long(argc, argv, "i:o:c:b:fkh", long_options, NULL)) != -1)
+    while ((ch = getopt_long(argc, argv, "i:o:c:lb:fkh", long_options, NULL)) != -1)
     {
         // check to see if a single character or long option came through
         switch (ch)
@@ -289,7 +396,7 @@ int get_options(
                 optarg_s = optarg;
                 temp_argument = std::stoi(optarg_s);
 
-                if (temp_argument < 1 || temp_argument > 9)
+                if (temp_argument < 1 || temp_argument > 12)
                 {
                     fprintf(stderr, "ERROR: the provided compression level option is not correct.\n\n");
                     print_help();
@@ -306,6 +413,11 @@ int get_options(
                 print_help();
                 return 1;
             }
+            break;
+
+        // short option '-f', long option "--force"
+        case 'l':
+            options.lz4hc = true;
             break;
 
         // short option '-b', long option "--block-size"
@@ -367,8 +479,11 @@ void print_help()
             "    ecmtool -i/--input example.zso\n"
             "    ecmtool -i/--input example.zso -o/--output example.iso\n"
             "Optional options:\n"
-            "    -c/--compression 1-9\n"
-            "           Compression level to be used. By default 9.\n"
+            "    -c/--compression 1-12\n"
+            "           Compression level to be used. By default 12.\n"
+            "    -l/--lz4hc\n"
+            "           Uses the LZ4 high compression algorithm to improve the compression ratio.\n"
+            "           NOTE: This will create a non standar ZSO and maybe the decompressor will not be compatible.\n"
             "    -b/--block-size <size>\n"
             "           The size in bytes of the blocks. By default 2048.\n"
             "    -f/--force\n"
@@ -378,4 +493,30 @@ void print_help()
             "    -h/--help\n"
             "           Show this help message.\n"
             "\n");
+}
+
+static void progress_compress(uint64_t currentInput, uint64_t totalInput, uint64_t currentOutput)
+{
+    uint8_t progress = (currentInput * 100) / totalInput;
+    uint8_t ratio = (currentOutput * 100) / currentInput;
+
+    if (lastProgress != progress || lastRatio != ratio)
+    {
+        fprintf(stderr, "%050s\r", "");
+        fprintf(stderr, "Compressing(%u%%) - Ratio(%u%%)\r", progress, ratio);
+        lastProgress = progress;
+        lastRatio = ratio;
+    }
+}
+
+static void progress_decompress(uint64_t currentInput, uint64_t totalInput)
+{
+    uint8_t progress = (currentInput * 100) / totalInput;
+
+    if (lastProgress != progress)
+    {
+        fprintf(stderr, "%050s\r", "");
+        fprintf(stderr, "Decompressing(%u%%)\r", progress);
+        lastProgress = progress;
+    }
 }

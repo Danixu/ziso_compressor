@@ -23,15 +23,28 @@
 #include <chrono>
 #include <getopt.h>
 #include <stdint.h>
+#include <cstring>
 #include <iostream>
 #include <fstream>
 #include <cmath>
-#include <cstring>
 #include <vector>
 
 // The LZ4_ACCELERATION_MAX is defined in the lz4.c file and is about 65537 (now).
 // Testing I have noticed that above 1024 the compression was almost the same, so I'll set the max there.
 #define LZ4_MAX_ACCELERATION 1024
+uint16_t lz4_compression_level[12] = {
+    LZ4_MAX_ACCELERATION,
+    uint16_t(LZ4_MAX_ACCELERATION *((float)10 / 11)),
+    uint16_t(LZ4_MAX_ACCELERATION *((float)9 / 11)),
+    uint16_t(LZ4_MAX_ACCELERATION *((float)8 / 11)),
+    uint16_t(LZ4_MAX_ACCELERATION *((float)7 / 11)),
+    uint16_t(LZ4_MAX_ACCELERATION *((float)6 / 11)),
+    uint16_t(LZ4_MAX_ACCELERATION *((float)5 / 11)),
+    uint16_t(LZ4_MAX_ACCELERATION *((float)4 / 11)),
+    uint16_t(LZ4_MAX_ACCELERATION *((float)3 / 11)),
+    uint16_t(LZ4_MAX_ACCELERATION *((float)2 / 11)),
+    uint16_t(LZ4_MAX_ACCELERATION *((float)1 / 11)),
+    1};
 
 #pragma pack(push)
 #pragma pack(1)
@@ -51,8 +64,9 @@ struct opt
 {
     std::string inputFile = "";
     std::string outputFile = "";
+    bool compress = true;
     uint32_t blockSize = 2048;
-    uint8_t compressionLevel = 9;
+    uint8_t compressionLevel = 12;
     bool lz4hc = false;
     bool overwrite = false;
     bool keepOutput = false;
@@ -65,20 +79,20 @@ struct opt
 /**
  * @brief Compress a block
  *
- * @param dst The destination buffer to store the data. It must have enough space or will fail
- * @param dstSize The space in the destination buffer
  * @param src The source data to "compress" (or not)
  * @param srcSize The source data size
- * @param compressed (output) True if the data was compressed or false if data is raw
+ * @param dst The destination buffer to store the data. It must have enough space or will fail
+ * @param dstSize The space in the destination buffer
+ * @param uncompressed (output) True if the data was not compressed or false otherwise.
  * @param settings Program settings
  * @return uint32_t The compressed data size. Will return 0 if something was wrong.
  */
 uint32_t compress_block(
-    char *dst,
-    uint32_t dstSize,
     const char *src,
     uint32_t srcSize,
-    bool &compressed,
+    char *dst,
+    uint32_t dstSize,
+    bool &uncompressed,
     opt settings);
 
 /**
@@ -122,3 +136,5 @@ int get_options(
     int argc,
     char **argv,
     opt &options);
+
+static void progress(uint64_t currentInput, uint64_t totalInput, uint64_t currentOutput);
