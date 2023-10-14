@@ -231,7 +231,7 @@ int main(int argc, char **argv)
                 }
             }
 
-            progress(inFile.tellg(), inputSize, (uint64_t)outFile.tellp() - headerSize);
+            progress_compress(inFile.tellg(), inputSize, (uint64_t)outFile.tellp() - headerSize);
         }
 
         // Set the eof position block
@@ -254,6 +254,75 @@ int main(int argc, char **argv)
 
     else
     {
+        // Get the input size
+        inFile.seekg(0, std::ios_base::end);
+        inputSize = inFile.tellg();
+        inFile.seekg(0, std::ios_base::beg);
+
+        // Read the header
+        inFile.read(reinterpret_cast<char *>(&fileHeader), sizeof(fileHeader));
+
+        // Calculate the blocks number
+        blocksNumber = ceil(fileHeader.uncompressedSize / fileHeader.blockSize) + 1;
+
+        // Reserve and read the blocks index
+        blocks.resize(blocksNumber, 0);
+        inFile.read((char *)blocks.data(), blocksNumber * sizeof(uint32_t));
+
+        // Check if the input file is damaged
+        bool uncompressed;
+        if (index_to_pos(blocks[blocksNumber - 1], fileHeader.indexShift, uncompressed) != inputSize)
+        {
+            // The input file doesn't matches the index data and maybe is damaged
+            fprintf(stderr, "\n\nERROR: The input file header is corrupt.\n\n");
+            return_code = 1;
+            goto exit;
+        }
+
+        // Maybe not all the programs will try the best between compressed and uncompressed data
+        // so reserve the double of read buffer space to be able to read >blockSize compressed blocks.
+        readBuffer.resize(fileHeader.blockSize * 2, 0);
+        writeBuffer.resize(fileHeader.blockSize, 0);
+
+        for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
+        {
+            uncompressed = false;
+            uint64_t blockEndPosition = index_to_pos(blocks[currentBlock + 1], fileHeader.indexShift, uncompressed);
+            uint64_t blockStartPosition = index_to_pos(blocks[currentBlock], fileHeader.indexShift, uncompressed);
+            uint64_t currentBlockSize = blockEndPosition - blockStartPosition;
+
+            // The current block size cannot exceed 2 x blockSize.
+            if (currentBlockSize > (fileHeader.blockSize * 2))
+            {
+                // Looks like the header is corrupted
+                fprintf(stderr, "\n\nERROR: The input file header is corrupt.\n\n");
+                return_code = 1;
+                goto exit;
+            }
+
+            // Read the block data
+            inFile.read(readBuffer.data(), currentBlockSize);
+
+            int decompressedBytes = decompress_block(
+                readBuffer.data(),
+                currentBlockSize,
+                writeBuffer.data(),
+                writeBuffer.size(),
+                uncompressed);
+
+            if (decompressedBytes > 0)
+            {
+                outFile.write(writeBuffer.data(), decompressedBytes);
+            }
+            else
+            {
+                fprintf(stderr, "ERROR: There was an error decompressing the source file.\n");
+                return_code = 1;
+                goto exit;
+            }
+
+            progress_decompress(inFile.tellg(), inputSize);
+        }
     }
 
 exit:
@@ -331,6 +400,31 @@ uint32_t compress_block(
     {
         uncompressed = false;
         return outSize;
+    }
+}
+
+uint32_t decompress_block(
+    const char *src,
+    uint32_t srcSize,
+    char *dst,
+    uint32_t dstSize,
+    bool uncompressed)
+{
+    if (uncompressed)
+    {
+        // If the data is non compressed, then just copy the source data
+        if (dstSize > srcSize)
+        {
+            // The raw input data is less than the buffer
+            return 0;
+        }
+
+        std::memcpy(dst, src, dstSize);
+        return dstSize;
+    }
+    else
+    {
+        return LZ4_decompress_safe_partial(src, dst, srcSize, dstSize, dstSize);
     }
 }
 

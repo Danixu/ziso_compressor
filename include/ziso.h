@@ -95,6 +95,13 @@ uint32_t compress_block(
     bool &uncompressed,
     opt settings);
 
+uint32_t decompress_block(
+    const char *src,
+    uint32_t srcSize,
+    char *dst,
+    uint32_t dstSize,
+    bool uncompressed);
+
 /**
  * @brief Convert a file position to index position considering the shift data
  *
@@ -137,4 +144,5 @@ int get_options(
     char **argv,
     opt &options);
 
-static void progress(uint64_t currentInput, uint64_t totalInput, uint64_t currentOutput);
+static void progress_compress(uint64_t currentInput, uint64_t totalInput, uint64_t currentOutput);
+static void progress_decompress(uint64_t currentInput, uint64_t totalInput);
