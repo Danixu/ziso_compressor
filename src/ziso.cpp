@@ -34,8 +34,6 @@ int main(int argc, char **argv)
     uint64_t inputSize;
     uint32_t blocksNumber;
     uint32_t headerSize;
-    uint64_t blockStartPosition = 0;
-    uint64_t blockRealStartPosition = 0;
 
     // Buffers
     std::vector<char> readBuffer;
@@ -192,6 +190,13 @@ int main(int argc, char **argv)
             uint64_t blockStartPosition = outFile.tellp();
             uint64_t blockRealStartPosition = blockStartPosition;
 
+            // Fill the output with zeroes until a valid start point depending of index shift
+            pos_to_index(blockRealStartPosition, fileHeader.indexShift, false);
+            for (uint64_t i = blockStartPosition; i < blockRealStartPosition; i++)
+            {
+                outFile.write("\0", 1);
+            }
+
             uint64_t toRead = settings.blockSize;
             uint64_t leftInFile = inputSize - inFile.tellg();
             if (leftInFile < toRead)
@@ -221,30 +226,20 @@ int main(int argc, char **argv)
                 goto exit;
             }
 
+            // Set the current block start point with the uncompressed flag
             blocks[currentBlock] = pos_to_index(blockRealStartPosition, fileHeader.indexShift, uncompressed);
 
-            if (blockRealStartPosition > blockStartPosition)
-            {
-                for (uint64_t i = blockStartPosition; i <= blockRealStartPosition; i++)
-                {
-                    outFile.write("\0", 1);
-                }
-            }
-
+            // Update the progress
             progress_compress(inFile.tellg(), inputSize, (uint64_t)outFile.tellp() - headerSize);
         }
 
         // Set the eof position block
-        blockStartPosition = outFile.tellp();
-        blockRealStartPosition = blockStartPosition;
+        uint64_t blockStartPosition = outFile.tellp();
+        uint64_t blockRealStartPosition = blockStartPosition;
         blocks[blocksNumber - 1] = pos_to_index(blockRealStartPosition, fileHeader.indexShift, false);
-
-        if (blockRealStartPosition > blockStartPosition)
+        for (uint64_t i = blockStartPosition; i < blockRealStartPosition; i++)
         {
-            for (uint64_t i = blockStartPosition; i <= blockRealStartPosition; i++)
-            {
-                outFile.write("\0", 1);
-            }
+            outFile.write("\0", 1);
         }
 
         // Write the blocks index
@@ -274,7 +269,7 @@ int main(int argc, char **argv)
         if (index_to_pos(blocks[blocksNumber - 1], fileHeader.indexShift, uncompressed) != inputSize)
         {
             // The input file doesn't matches the index data and maybe is damaged
-            fprintf(stderr, "\n\nERROR: The input file header is corrupt.\n\n");
+            fprintf(stderr, "\n\nERROR: The input file header is corrupt. Filesize doesn't matches.\n\n");
             return_code = 1;
             goto exit;
         }
@@ -295,7 +290,7 @@ int main(int argc, char **argv)
             if (currentBlockSize > (fileHeader.blockSize * 2))
             {
                 // Looks like the header is corrupted
-                fprintf(stderr, "\n\nERROR: The input file header is corrupt.\n\n");
+                fprintf(stderr, "\n\nERROR: The input file header is corrupt. Corrupted index block.\n\n");
                 return_code = 1;
                 goto exit;
             }
