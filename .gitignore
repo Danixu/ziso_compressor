@@ -38,3 +38,5 @@ test*
 
 # Google Docs files
 **.gsheet
+
+**/ziso.py
