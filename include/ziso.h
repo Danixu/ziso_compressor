@@ -102,28 +102,9 @@ uint32_t decompress_block(
     uint32_t dstSize,
     bool uncompressed);
 
-/**
- * @brief Convert a file position to index position considering the shift data
- *
- * @param filePosition (input/output) Start point of the block. Will be updated with the new position if shift is used.
- * @param shift Bits to shift the filePosition variable
- * @param compressed The block is a compressed block
- * @return uint32_t The Index data that will be stored into the zso file.
- */
-uint32_t pos_to_index(
-    uint64_t &filePosition,
-    uint8_t shift,
-    bool uncompressed);
-
-/**
- * @brief Convert the index position to the file position considering the shift data.
- *
- * @param indexData The index entry in uint32_t.
- * @param shift Bits that the position was shifted
- * @param compressed (output) Returns the compression status of the index entry.
- * @return uint64_t The position of the block
- */
-uint64_t index_to_pos(uint32_t indexData, uint8_t shift, bool &uncompressed);
+void file_align(
+    std::fstream &fOut,
+    uint8_t shift);
 
 /**
  * @brief Prints the help message

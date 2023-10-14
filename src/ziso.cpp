@@ -175,6 +175,24 @@ int main(int argc, char **argv)
         }
         // Files with less than 2GB doesn't need to shift.
 
+        // Print the sumary
+        fprintf(stderr, "%20s %s\n", "Source:", settings.inputFile.c_str());
+        fprintf(stderr, "%20s %s\n\n", "Destination:", settings.outputFile.c_str());
+        fprintf(stderr, "%20s %lu bytes\n", "Total File Size:", inputSize);
+        fprintf(stderr, "%20s %d\n", "Block Size:", settings.blockSize);
+        fprintf(stderr, "%20s %d\n", "Index align:", fileHeader.indexShift);
+        fprintf(stderr, "%20s %d\n", "Compress Level:", settings.compressionLevel);
+        if (settings.lz4hc)
+        {
+            fprintf(stderr, "%20s Yes\n", "LZ4 HC Compression:");
+            // 20
+        }
+        else
+        {
+            fprintf(stderr, "%20s %d\n", "LZ4 acceleration:", lz4_compression_level[settings.compressionLevel - 1]);
+            fprintf(stderr, "%20s No\n", "LZ4 HC Compression:");
+        }
+
         outFile.write(reinterpret_cast<const char *>(&fileHeader), sizeof(fileHeader));
 
         // Reserve the blocks index space
@@ -187,15 +205,11 @@ int main(int argc, char **argv)
 
         for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
         {
-            uint64_t blockStartPosition = outFile.tellp();
-            uint64_t blockRealStartPosition = blockStartPosition;
-
             // Fill the output with zeroes until a valid start point depending of index shift
-            pos_to_index(blockRealStartPosition, fileHeader.indexShift, false);
-            for (uint64_t i = blockStartPosition; i < blockRealStartPosition; i++)
-            {
-                outFile.write("\0", 1);
-            }
+            file_align(outFile, fileHeader.indexShift);
+
+            // Capture the block position
+            uint64_t blockStartPosition = outFile.tellp();
 
             uint64_t toRead = settings.blockSize;
             uint64_t leftInFile = inputSize - inFile.tellg();
@@ -227,26 +241,21 @@ int main(int argc, char **argv)
             }
 
             // Set the current block start point with the uncompressed flag
-            blocks[currentBlock] = pos_to_index(blockRealStartPosition, fileHeader.indexShift, uncompressed);
+            blocks[currentBlock] = (blockStartPosition >> fileHeader.indexShift) | (uncompressed << 31);
 
             // Update the progress
             progress_compress(inFile.tellg(), inputSize, (uint64_t)outFile.tellp() - headerSize);
         }
 
-        // Set the eof position block
-        uint64_t blockStartPosition = outFile.tellp();
-        uint64_t blockRealStartPosition = blockStartPosition;
-        blocks[blocksNumber - 1] = pos_to_index(blockRealStartPosition, fileHeader.indexShift, false);
-        for (uint64_t i = blockStartPosition; i < blockRealStartPosition; i++)
-        {
-            outFile.write("\0", 1);
-        }
+        // Align the file and set the eof position block
+        file_align(outFile, fileHeader.indexShift);
+        uint64_t blockEndPosition = outFile.tellp();
+        blocks[blocksNumber - 1] = (blockEndPosition >> fileHeader.indexShift);
 
         // Write the blocks index
         outFile.seekp(0x18);
         outFile.write((const char *)blocks.data(), blocksNumber * sizeof(uint32_t));
     }
-
     else
     {
         // Get the input size
@@ -264,9 +273,17 @@ int main(int argc, char **argv)
         blocks.resize(blocksNumber, 0);
         inFile.read((char *)blocks.data(), blocksNumber * sizeof(uint32_t));
 
+        // Print the sumary
+        fprintf(stderr, "%20s %s\n", "Source:", settings.inputFile.c_str());
+        fprintf(stderr, "%20s %s\n\n", "Destination:", settings.outputFile.c_str());
+        fprintf(stderr, "%20s %lu bytes\n", "Total File Size:", fileHeader.uncompressedSize);
+        fprintf(stderr, "%20s %d\n", "Block Size:", fileHeader.blockSize);
+        fprintf(stderr, "%20s %d\n", "Index align:", fileHeader.indexShift);
+
         // Check if the input file is damaged
-        bool uncompressed;
-        if (index_to_pos(blocks[blocksNumber - 1], fileHeader.indexShift, uncompressed) != inputSize)
+        uint64_t headerFileSize = uint64_t(blocks[blocksNumber - 1] & 0x7FFFFFFF) << fileHeader.indexShift;
+
+        if (headerFileSize != inputSize)
         {
             // The input file doesn't matches the index data and maybe is damaged
             fprintf(stderr, "\n\nERROR: The input file header is corrupt. Filesize doesn't matches.\n\n");
@@ -281,9 +298,9 @@ int main(int argc, char **argv)
 
         for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
         {
-            uncompressed = false;
-            uint64_t blockEndPosition = index_to_pos(blocks[currentBlock + 1], fileHeader.indexShift, uncompressed);
-            uint64_t blockStartPosition = index_to_pos(blocks[currentBlock], fileHeader.indexShift, uncompressed);
+            bool uncompressed = blocks[currentBlock] & 0x80000000;
+            uint64_t blockStartPosition = uint64_t(blocks[currentBlock] & 0x7FFFFFFF) << fileHeader.indexShift;
+            uint64_t blockEndPosition = uint64_t(blocks[currentBlock + 1] & 0x7FFFFFFF) << fileHeader.indexShift;
             uint64_t currentBlockSize = blockEndPosition - blockStartPosition;
 
             // The current block size cannot exceed 2 x blockSize.
@@ -371,11 +388,19 @@ uint32_t compress_block(
     uint32_t outSize = 0;
     if (settings.lz4hc)
     {
-        outSize = LZ4_compress_HC(src, dst, srcSize, dstSize, settings.compressionLevel);
+        LZ4_streamHC_t lz4_state;
+        LZ4_resetStreamHC(&lz4_state, settings.compressionLevel);
+        outSize = LZ4_compress_HC_continue(&lz4_state, src, dst, srcSize, dstSize);
+
+        // outSize = LZ4_compress_HC(src, dst, srcSize, dstSize, settings.compressionLevel);
     }
     else
     {
-        outSize = LZ4_compress_fast(src, dst, srcSize, dstSize, lz4_compression_level[settings.compressionLevel - 1]);
+        LZ4_stream_t lz4_state;
+        LZ4_resetStream(&lz4_state);
+        outSize = LZ4_compress_fast_continue(&lz4_state, src, dst, srcSize, dstSize, lz4_compression_level[settings.compressionLevel - 1]);
+
+        // outSize = LZ4_compress_fast(src, dst, srcSize, dstSize, lz4_compression_level[settings.compressionLevel - 1]);
     }
 
     // If the block was not compressed because a buffer space problem, or the output is bigger than input
@@ -423,32 +448,17 @@ uint32_t decompress_block(
     }
 }
 
-uint32_t pos_to_index(uint64_t &filePosition, uint8_t shift, bool uncompressed)
+void file_align(std::fstream &fOut, uint8_t shift)
 {
-    // Shift right the required bits and store the position into the uint32_t variable
-    uint32_t indexPosition = filePosition >> shift;
-    // Set the "new" file position
-    uint64_t newFilePosition = indexPosition << shift;
-    // Check if the new position is lower than the original position a padding will be applied. The difference must be padded using zeroes in the output file.
-    if (filePosition > newFilePosition)
+    uint16_t paddingLostBytes = fOut.tellp() % (1 << shift);
+    if (paddingLostBytes)
     {
-        indexPosition++;
-        newFilePosition = indexPosition << shift;
+        uint16_t alignment = (1 << shift) - paddingLostBytes;
+        for (uint64_t i = 0; i < alignment; i++)
+        {
+            fOut.write("\0", 1);
+        }
     }
-    // Set the compression bit
-    indexPosition = indexPosition | uncompressed << 31;
-
-    // Return the filePosition variable
-    filePosition = newFilePosition;
-
-    // Return the index position
-    return indexPosition;
-}
-
-uint64_t index_to_pos(uint32_t indexData, uint8_t shift, bool &uncompressed)
-{
-    uncompressed = indexData & 0x80000000;
-    return (indexData & 0x7FFFFFFF) << shift;
 }
 
 int get_options(
