@@ -35,7 +35,8 @@ git submodules update --init
 Compile the library:
 
 ```
-g++ -I../include ../lib/lz4/lib/lz4.c ../lib/lz4/lib/lz4hc.c ziso.cpp -O3 -o ziso/ziso.exe
+cd src
+g++ -I../include ../lib/lz4/lib/lz4.c ../lib/lz4/lib/lz4hc.c ziso.cpp -O3 -o <ziso or ziso.exe>
 ```
 
 Tested in Manjaro and Windows 11 with MSYS2 with MinGW64.
@@ -72,6 +73,8 @@ ziso.exe -i <input-file> -o <output-file>
 #### Compression
 
 The LZ4 method doesn't have compression level arguments. Instead, it has **acceleration** which will affects the speed and compression ratio (just like the compression arguments). On my program I use the **acceleration** to supply the compression level.
+
+The LZ4HC method already includes the compression option, so it will passed to it directly.
 
 #### Alternative LZ4 compression method
 
