@@ -16,7 +16,6 @@ static struct option long_options[] = {
 
 // global variales
 uint8_t lastProgress = 100; // Force at 0% of progress
-uint8_t lastRatio = 0;
 summary summaryData;
 
 int main(int argc, char **argv)
@@ -178,39 +177,42 @@ int main(int argc, char **argv)
         }
         // Files with less than 2GB doesn't need to shift.
 
+        if (options.bruteForce && options.lz4hc)
+        {
+            fprintf(stderr, "WARNING: The brute-force method will try the best between the two Standard LZ4 methods. LZ4HC already uses the best method, so no brute-force is required. LZ4HC flag will be ignored...\n");
+        }
+
         // Print the sumary
-        fprintf(stderr, "%20s %s\n", "Source:", options.inputFile.c_str());
-        fprintf(stderr, "%20s %s\n\n", "Destination:", options.outputFile.c_str());
-        fprintf(stderr, "%20s %lu bytes\n", "Total File Size:", inputSize);
-        fprintf(stderr, "%20s %d\n", "Block Size:", options.blockSize);
-        fprintf(stderr, "%20s %d\n", "Index align:", fileHeader.indexShift);
-        fprintf(stderr, "%20s %d\n", "Compress Level:", options.compressionLevel);
+        fprintf(stdout, "%20s %s\n", "Source:", options.inputFile.c_str());
+        fprintf(stdout, "%20s %s\n\n", "Destination:", options.outputFile.c_str());
+        fprintf(stdout, "%20s %lu bytes\n", "Total File Size:", inputSize);
+        fprintf(stdout, "%20s %d\n", "Block Size:", options.blockSize);
+        fprintf(stdout, "%20s %d\n", "Index align:", fileHeader.indexShift);
+        fprintf(stdout, "%20s %d\n", "Compress Level:", options.compressionLevel);
         if (options.bruteForce)
         {
-            fprintf(stderr, "%20s Yes\n", "Brute Force Search:");
-            // 20
+            fprintf(stdout, "%20s Yes\n", "Brute Force Search:");
         }
         else
         {
-            fprintf(stderr, "%20s No\n", "Brute Force Search:");
+            fprintf(stdout, "%20s No\n", "Brute Force Search:");
         }
         if (options.lz4hc)
         {
-            fprintf(stderr, "%20s Yes\n", "LZ4 HC Compression:");
-            // 20
+            fprintf(stdout, "%20s Yes\n", "LZ4 HC Compression:");
         }
         else
         {
-            fprintf(stderr, "%20s %d\n", "LZ4 acceleration:", lz4_compression_level[options.compressionLevel - 1]);
+            fprintf(stdout, "%20s %d\n", "LZ4 acceleration:", lz4_compression_level[options.compressionLevel - 1]);
             if (options.alternativeLz4)
             {
-                fprintf(stderr, "%20s Yes\n", "LZ4 Mode 2:");
+                fprintf(stdout, "%20s Yes\n", "LZ4 Mode 2:");
             }
             else
             {
-                fprintf(stderr, "%20s No\n", "LZ4 Mode 2:");
+                fprintf(stdout, "%20s No\n", "LZ4 Mode 2:");
             }
-            fprintf(stderr, "%20s No\n", "LZ4 HC Compression:");
+            fprintf(stdout, "%20s No\n", "LZ4 HC Compression:");
         }
 
         outFile.write(reinterpret_cast<const char *>(&fileHeader), sizeof(fileHeader));
@@ -297,11 +299,11 @@ int main(int argc, char **argv)
         inFile.read((char *)blocks.data(), blocksNumber * sizeof(uint32_t));
 
         // Print the sumary
-        fprintf(stderr, "%20s %s\n", "Source:", options.inputFile.c_str());
-        fprintf(stderr, "%20s %s\n\n", "Destination:", options.outputFile.c_str());
-        fprintf(stderr, "%20s %lu bytes\n", "Total File Size:", fileHeader.uncompressedSize);
-        fprintf(stderr, "%20s %d\n", "Block Size:", fileHeader.blockSize);
-        fprintf(stderr, "%20s %d\n", "Index align:", fileHeader.indexShift);
+        fprintf(stdout, "%20s %s\n", "Source:", options.inputFile.c_str());
+        fprintf(stdout, "%20s %s\n\n", "Destination:", options.outputFile.c_str());
+        fprintf(stdout, "%20s %lu bytes\n", "Total File Size:", fileHeader.uncompressedSize);
+        fprintf(stdout, "%20s %d\n", "Block Size:", fileHeader.blockSize);
+        fprintf(stdout, "%20s %d\n", "Index align:", fileHeader.indexShift);
 
         // Check if the input file is damaged
         uint64_t headerFileSize = uint64_t(blocks[blocksNumber - 1] & 0x7FFFFFFF) << fileHeader.indexShift;
@@ -417,11 +419,9 @@ uint32_t compress_block(
         // This method will try all the available compression methods to select the most apropiate.
         uint32_t lz4Size = 0;
         uint32_t lz4Method2Size = 0;
-        uint32_t lz4HCSize = dstSize + 1; // This default size will simplify the code when HC is not used
 
         std::vector<char> lz4Buffer(dstSize, 0);
         std::vector<char> lz4Method2Buffer(dstSize, 0);
-        std::vector<char> lz4HCBuffer(dstSize, 0);
 
         bool counted = false;
 
@@ -432,13 +432,6 @@ uint32_t compress_block(
         lz4Size = LZ4_compress_fast_continue(&lz4_state, src, lz4Buffer.data(), srcSize, dstSize, lz4_compression_level[options.compressionLevel - 1]);
         // Method 2
         lz4Method2Size = LZ4_compress_fast(src, lz4Method2Buffer.data(), srcSize, dstSize, lz4_compression_level[options.compressionLevel - 1]);
-        // HC only if enabled
-        if (options.lz4hc)
-        {
-            LZ4_streamHC_t lz4hc_state;
-            LZ4_resetStreamHC(&lz4hc_state, options.compressionLevel);
-            lz4HCSize = LZ4_compress_HC_continue(&lz4hc_state, src, lz4HCBuffer.data(), srcSize, dstSize);
-        }
 
         // Get the smaller output between all the methods
         if (lz4Size > 0 && (lz4Size < outSize || outSize == 0))
@@ -449,55 +442,33 @@ uint32_t compress_block(
         {
             outSize = lz4Method2Size;
         }
-        if (lz4HCSize > 0 && (lz4HCSize < outSize || outSize == 0))
-        {
-            outSize = lz4HCSize;
-        }
 
-        // Use in the summary
+        // If there was an error compressing or the size is bigger than source, don't do anything.
         if (outSize == 0 || outSize >= srcSize)
         {
-            counted = true;
+            // The raw data will be copied later
         }
-
-        // The methods priority are LZ4, LZ4 Method 2, LZ4HC.
-        // If LZ4 and LZ4HC have the same size, LZ4 will be used.
-        if (lz4Size > 0 && outSize == lz4Size)
+        // The methods priority are LZ4, LZ4 Method 2.
+        else if (lz4Size > 0 && outSize == lz4Size)
         {
             std::memcpy(dst, lz4Buffer.data(), lz4Size);
 
-            if (!counted)
-            {
-                summaryData.lz4Count++;
-                summaryData.lz4In += srcSize;
-                summaryData.lz4Out += outSize;
-            }
+            summaryData.lz4Count++;
+            summaryData.lz4In += srcSize;
+            summaryData.lz4Out += outSize;
         }
         else if (lz4Method2Size > 0 && outSize == lz4Method2Size)
         {
             std::memcpy(dst, lz4Method2Buffer.data(), lz4Method2Size);
 
-            if (!counted)
-            {
-                summaryData.lz4m2Count++;
-                summaryData.lz4m2In += srcSize;
-                summaryData.lz4m2Out += outSize;
-            }
-        }
-        else if (lz4HCSize > 0 && outSize == lz4HCSize)
-        {
-            std::memcpy(dst, lz4HCBuffer.data(), lz4HCSize);
-
-            if (!counted)
-            {
-                summaryData.lz4hcCount++;
-                summaryData.lz4hcIn += srcSize;
-                summaryData.lz4hcOut += outSize;
-            }
+            summaryData.lz4m2Count++;
+            summaryData.lz4m2In += srcSize;
+            summaryData.lz4m2Out += outSize;
         }
         else
         {
-            // All the methods returned 0 so maybe the size of the buffer was no enough. Copy raw...
+            // Something weird
+            return 0;
         }
     }
     else
@@ -732,7 +703,7 @@ int get_options(
 void print_help()
 {
     banner();
-    fprintf(stderr,
+    fprintf(stdout,
             "Usage:\n"
             "\n"
             "The program detects ziso sources and selects the decompression mode:\n"
@@ -749,7 +720,7 @@ void print_help()
             "           Uses the LZ4 high compression algorithm to improve the compression ratio.\n"
             "           NOTE: This will create a non standar ZSO and maybe the decompressor will not be compatible.\n"
             "    -b/--brute-force\n"
-            "           SLOW: Try to compress using the two LZ4 methods. Use -l/--lz4hc to also try using HC.\n"
+            "           SLOW: Try to compress using the two LZ4 methods. LZ4HC already selects the best compression method.\n"
             "    -s/--block-size <size>\n"
             "           The size in bytes of the blocks. By default 2048.\n"
             "    -f/--force\n"
@@ -764,12 +735,12 @@ static void progress_compress(uint64_t currentInput, uint64_t totalInput, uint64
     uint8_t progress = (currentInput * 100) / totalInput;
     uint8_t ratio = (currentOutput * 100) / currentInput;
 
-    if (lastProgress != progress || lastRatio != ratio)
+    if (lastProgress != progress)
     {
-        fprintf(stderr, "%050s\r", "");
-        fprintf(stderr, "Compressing(%u%%) - Ratio(%u%%)\r", progress, ratio);
+        fprintf(stdout, "%050s\r", "");
+        fprintf(stdout, "Compressing(%u%%) - Ratio(%u%%)\r", progress, ratio);
+        fflush(stdout);
         lastProgress = progress;
-        lastRatio = ratio;
     }
 }
 
@@ -779,8 +750,9 @@ static void progress_decompress(uint64_t currentInput, uint64_t totalInput)
 
     if (lastProgress != progress)
     {
-        fprintf(stderr, "%050s\r", "");
-        fprintf(stderr, "Decompressing(%u%%)\r", progress);
+        fprintf(stdout, "%050s\r", "");
+        fprintf(stdout, "Decompressing(%u%%)\r", progress);
+        fflush(stdout);
         lastProgress = progress;
     }
 }
@@ -793,9 +765,18 @@ static void show_summary(uint64_t outputSize, opt options)
     fprintf(stdout, "--------------------------------------------------------------\n");
     fprintf(stdout, " Type                Sectors        In Size          Out Size \n");
     fprintf(stdout, "--------------------------------------------------------------\n");
-    fprintf(stdout, "LZ4 ............... %7d ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4Count, MB(summaryData.lz4In), MB(summaryData.lz4Out));
-    fprintf(stdout, "LZ4 M2 ............ %7d ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4m2Count, MB(summaryData.lz4m2In), MB(summaryData.lz4m2Out));
-    fprintf(stdout, "LZ4HC ............. %7d ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4hcCount, MB(summaryData.lz4hcIn), MB(summaryData.lz4hcOut));
+    if (options.bruteForce || (!options.lz4hc && !options.alternativeLz4))
+    {
+        fprintf(stdout, "LZ4 ............... %7d ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4Count, MB(summaryData.lz4In), MB(summaryData.lz4Out));
+    }
+    if (options.bruteForce || (!options.lz4hc && options.alternativeLz4))
+    {
+        fprintf(stdout, "LZ4 M2 ............ %7d ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4m2Count, MB(summaryData.lz4m2In), MB(summaryData.lz4m2Out));
+    }
+    if (!options.bruteForce && options.lz4hc)
+    {
+        fprintf(stdout, "LZ4HC ............. %7d ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4hcCount, MB(summaryData.lz4hcIn), MB(summaryData.lz4hcOut));
+    }
     fprintf(stdout, "RAW ............... %7d ...... %7.2fMB ...... %7.2fMB\n", summaryData.rawCount, MB(summaryData.raw), MB(summaryData.raw));
     fprintf(stdout, "--------------------------------------------------------------\n");
     fprintf(stdout, "Total ............. %7d ...... %7.2fMb ...... %7.2fMb\n", total_sectors, MB(summaryData.sourceSize), MB(outputSize));
