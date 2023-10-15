@@ -74,6 +74,25 @@ struct opt
     bool keepOutput = false;
 } opt_struct;
 
+struct summary
+{
+    uint64_t sourceSize = 0;
+    uint64_t lz4Count = 0;
+    uint64_t lz4In = 0;
+    uint64_t lz4Out = 0;
+    uint64_t lz4m2Count = 0;
+    uint64_t lz4m2In = 0;
+    uint64_t lz4m2Out = 0;
+    uint64_t lz4hcCount = 0;
+    uint64_t lz4hcIn = 0;
+    uint64_t lz4hcOut = 0;
+    uint64_t rawCount = 0;
+    uint64_t raw = 0;
+} summary_struct;
+
+// MB Macro
+#define MB(x) ((float)(x) / 1024 / 1024)
+
 ///////////////////////////////
 //
 // Functions
@@ -129,3 +148,4 @@ int get_options(
 
 static void progress_compress(uint64_t currentInput, uint64_t totalInput, uint64_t currentOutput);
 static void progress_decompress(uint64_t currentInput, uint64_t totalInput);
+static void show_summary(uint64_t outputSize, opt options);

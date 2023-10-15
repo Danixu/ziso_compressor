@@ -14,8 +14,10 @@ static struct option long_options[] = {
     {"keep-output", no_argument, NULL, 'k'},
     {NULL, 0, NULL, 0}};
 
+// global variales
 uint8_t lastProgress = 100; // Force at 0% of progress
 uint8_t lastRatio = 0;
+summary summaryData;
 
 int main(int argc, char **argv)
 {
@@ -183,6 +185,15 @@ int main(int argc, char **argv)
         fprintf(stderr, "%20s %d\n", "Block Size:", options.blockSize);
         fprintf(stderr, "%20s %d\n", "Index align:", fileHeader.indexShift);
         fprintf(stderr, "%20s %d\n", "Compress Level:", options.compressionLevel);
+        if (options.bruteForce)
+        {
+            fprintf(stderr, "%20s Yes\n", "Brute Force Search:");
+            // 20
+        }
+        else
+        {
+            fprintf(stderr, "%20s No\n", "Brute Force Search:");
+        }
         if (options.lz4hc)
         {
             fprintf(stderr, "%20s Yes\n", "LZ4 HC Compression:");
@@ -264,6 +275,9 @@ int main(int argc, char **argv)
         // Write the blocks index
         outFile.seekp(0x18);
         outFile.write((const char *)blocks.data(), blocksNumber * sizeof(uint32_t));
+
+        outFile.seekp(0, std::ios_base::end);
+        show_summary(outFile.tellp(), options);
     }
     else
     {
@@ -393,6 +407,9 @@ uint32_t compress_block(
     bool &uncompressed,
     opt options)
 {
+    // The source size will be the same always
+    summaryData.sourceSize += srcSize;
+
     // Try to compress the data into the dst buffer
     uint32_t outSize = 0;
     if (options.bruteForce)
@@ -400,11 +417,13 @@ uint32_t compress_block(
         // This method will try all the available compression methods to select the most apropiate.
         uint32_t lz4Size = 0;
         uint32_t lz4Method2Size = 0;
-        uint32_t lz4HCSize = 0; // This default size will simplify the code when HC is not used
+        uint32_t lz4HCSize = dstSize + 1; // This default size will simplify the code when HC is not used
 
         std::vector<char> lz4Buffer(dstSize, 0);
         std::vector<char> lz4Method2Buffer(dstSize, 0);
         std::vector<char> lz4HCBuffer(dstSize, 0);
+
+        bool counted = false;
 
         // Compress using the standard methods
         // Method 1
@@ -421,37 +440,64 @@ uint32_t compress_block(
             lz4HCSize = LZ4_compress_HC_continue(&lz4hc_state, src, lz4HCBuffer.data(), srcSize, dstSize);
         }
 
-        // Set the size to the method1 compression
-        outSize = lz4Size;
-
-        // If method 2 is smaller then update it
-        if (lz4Method2Size < outSize)
+        // Get the smaller output between all the methods
+        if (lz4Size > 0 && (lz4Size < outSize || outSize == 0))
+        {
+            outSize = lz4Size;
+        }
+        if (lz4Method2Size > 0 && (lz4Method2Size < outSize || outSize == 0))
         {
             outSize = lz4Method2Size;
         }
-        // If HC is used and size is smaller, then update the outSize again
-        if (options.lz4hc && lz4HCSize < outSize)
+        if (lz4HCSize > 0 && (lz4HCSize < outSize || outSize == 0))
         {
             outSize = lz4HCSize;
         }
 
-        // It's time to copy the data buffer
-        if (outSize == lz4Size)
+        // Use in the summary
+        if (outSize == 0 || outSize >= srcSize)
         {
-            std::memcpy(dst, lz4Buffer.data(), outSize);
+            counted = true;
         }
-        else if (outSize == lz4Method2Size)
+
+        // The methods priority are LZ4, LZ4 Method 2, LZ4HC.
+        // If LZ4 and LZ4HC have the same size, LZ4 will be used.
+        if (lz4Size > 0 && outSize == lz4Size)
         {
-            std::memcpy(dst, lz4Method2Buffer.data(), outSize);
+            std::memcpy(dst, lz4Buffer.data(), lz4Size);
+
+            if (!counted)
+            {
+                summaryData.lz4Count++;
+                summaryData.lz4In += srcSize;
+                summaryData.lz4Out += outSize;
+            }
         }
-        else if (options.lz4hc && outSize == lz4HCSize)
+        else if (lz4Method2Size > 0 && outSize == lz4Method2Size)
         {
-            std::memcpy(dst, lz4HCBuffer.data(), outSize);
+            std::memcpy(dst, lz4Method2Buffer.data(), lz4Method2Size);
+
+            if (!counted)
+            {
+                summaryData.lz4m2Count++;
+                summaryData.lz4m2In += srcSize;
+                summaryData.lz4m2Out += outSize;
+            }
+        }
+        else if (lz4HCSize > 0 && outSize == lz4HCSize)
+        {
+            std::memcpy(dst, lz4HCBuffer.data(), lz4HCSize);
+
+            if (!counted)
+            {
+                summaryData.lz4hcCount++;
+                summaryData.lz4hcIn += srcSize;
+                summaryData.lz4hcOut += outSize;
+            }
         }
         else
         {
-            // Something weird happens
-            return 0;
+            // All the methods returned 0 so maybe the size of the buffer was no enough. Copy raw...
         }
     }
     else
@@ -482,7 +528,7 @@ uint32_t compress_block(
 
     // If the block was not compressed because a buffer space problem, or the output is bigger than input
     //
-    if (outSize == 0 || outSize > srcSize)
+    if (outSize == 0 || outSize >= srcSize)
     {
         if (dstSize < srcSize)
         {
@@ -491,11 +537,42 @@ uint32_t compress_block(
         }
         uncompressed = true;
         std::memcpy(dst, src, srcSize);
+
+        summaryData.rawCount++;
+        summaryData.raw += srcSize;
+
         return srcSize;
     }
     else
     {
         uncompressed = false;
+
+        // When brute force is used, summary data is added before.
+        if (!options.bruteForce)
+        {
+            if (options.lz4hc)
+            {
+                summaryData.lz4hcCount++;
+                summaryData.lz4hcIn += srcSize;
+                summaryData.lz4hcOut += outSize;
+            }
+            else
+            {
+                if (options.alternativeLz4)
+                {
+                    summaryData.lz4m2Count++;
+                    summaryData.lz4m2In += srcSize;
+                    summaryData.lz4m2Out += outSize;
+                }
+                else
+                {
+                    summaryData.lz4Count++;
+                    summaryData.lz4In += srcSize;
+                    summaryData.lz4Out += outSize;
+                }
+            }
+        }
+
         return outSize;
     }
 }
@@ -706,4 +783,22 @@ static void progress_decompress(uint64_t currentInput, uint64_t totalInput)
         fprintf(stderr, "Decompressing(%u%%)\r", progress);
         lastProgress = progress;
     }
+}
+
+static void show_summary(uint64_t outputSize, opt options)
+{
+    uint32_t total_sectors = summaryData.lz4Count + summaryData.lz4m2Count + summaryData.lz4hcCount + summaryData.rawCount;
+    fprintf(stdout, "\n\n");
+    fprintf(stdout, " ZSO compression sumpary\n");
+    fprintf(stdout, "--------------------------------------------------------------\n");
+    fprintf(stdout, " Type                Sectors        In Size          Out Size \n");
+    fprintf(stdout, "--------------------------------------------------------------\n");
+    fprintf(stdout, "LZ4 ............... %7d ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4Count, MB(summaryData.lz4In), MB(summaryData.lz4Out));
+    fprintf(stdout, "LZ4 M2 ............ %7d ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4m2Count, MB(summaryData.lz4m2In), MB(summaryData.lz4m2Out));
+    fprintf(stdout, "LZ4HC ............. %7d ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4hcCount, MB(summaryData.lz4hcIn), MB(summaryData.lz4hcOut));
+    fprintf(stdout, "RAW ............... %7d ...... %7.2fMB ...... %7.2fMB\n", summaryData.rawCount, MB(summaryData.raw), MB(summaryData.raw));
+    fprintf(stdout, "--------------------------------------------------------------\n");
+    fprintf(stdout, "Total ............. %7d ...... %7.2fMb ...... %7.2fMb\n", total_sectors, MB(summaryData.sourceSize), MB(outputSize));
+    fprintf(stdout, "ZSO reduction (input vs ZSO) ...................... %3.2f%%\n", (1.0 - (outputSize / (float)summaryData.sourceSize)) * 100);
+    fprintf(stdout, "\n\n");
 }
