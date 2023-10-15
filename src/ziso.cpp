@@ -401,7 +401,7 @@ exit:
     return return_code;
 }
 
-uint32_t compress_block(
+inline uint32_t compress_block(
     const char *src,
     uint32_t srcSize,
     char *dst,
@@ -548,7 +548,7 @@ uint32_t compress_block(
     }
 }
 
-uint32_t decompress_block(
+inline uint32_t decompress_block(
     const char *src,
     uint32_t srcSize,
     char *dst,

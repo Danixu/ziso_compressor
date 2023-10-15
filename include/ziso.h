@@ -108,7 +108,7 @@ struct summary
  * @param options Program options
  * @return uint32_t The compressed data size. Will return 0 if something was wrong.
  */
-uint32_t compress_block(
+inline uint32_t compress_block(
     const char *src,
     uint32_t srcSize,
     char *dst,
@@ -116,7 +116,7 @@ uint32_t compress_block(
     bool &uncompressed,
     opt options);
 
-uint32_t decompress_block(
+inline uint32_t decompress_block(
     const char *src,
     uint32_t srcSize,
     char *dst,
