@@ -67,6 +67,8 @@ struct opt
     bool compress = true;
     uint32_t blockSize = 2048;
     uint8_t compressionLevel = 12;
+    bool alternativeLz4 = false;
+    bool bruteForce = false;
     bool lz4hc = false;
     bool overwrite = false;
     bool keepOutput = false;
@@ -84,7 +86,7 @@ struct opt
  * @param dst The destination buffer to store the data. It must have enough space or will fail
  * @param dstSize The space in the destination buffer
  * @param uncompressed (output) True if the data was not compressed or false otherwise.
- * @param settings Program settings
+ * @param options Program options
  * @return uint32_t The compressed data size. Will return 0 if something was wrong.
  */
 uint32_t compress_block(
@@ -93,7 +95,7 @@ uint32_t compress_block(
     char *dst,
     uint32_t dstSize,
     bool &uncompressed,
-    opt settings);
+    opt options);
 
 uint32_t decompress_block(
     const char *src,

@@ -6,11 +6,12 @@ static struct option long_options[] = {
     {"input", required_argument, NULL, 'i'},
     {"output", required_argument, NULL, 'o'},
     {"compression", required_argument, NULL, 'c'},
-    {"lz4hc", required_argument, NULL, 'l'},
-    {"block-size", required_argument, NULL, 'b'},
-    {"force", required_argument, NULL, 'f'},
-    {"keep-output", required_argument, NULL, 'k'},
-    {"help", required_argument, NULL, 'h'},
+    {"mode2-lz4", no_argument, NULL, 'm'},
+    {"lz4hc", no_argument, NULL, 'h'},
+    {"brute-force", no_argument, NULL, 'b'},
+    {"block-size", required_argument, NULL, 's'},
+    {"force", no_argument, NULL, 'f'},
+    {"keep-output", no_argument, NULL, 'k'},
     {NULL, 0, NULL, 0}};
 
 uint8_t lastProgress = 100; // Force at 0% of progress
@@ -25,7 +26,7 @@ int main(int argc, char **argv)
     int return_code = 0;
 
     // Main options
-    opt settings;
+    opt options;
 
     // Header
     zheader fileHeader;
@@ -45,13 +46,13 @@ int main(int argc, char **argv)
     std::fstream inFile;
     std::fstream outFile;
 
-    return_code = get_options(argc, argv, settings);
+    return_code = get_options(argc, argv, options);
     if (return_code)
     {
         goto exit;
     }
 
-    if (settings.inputFile.empty())
+    if (options.inputFile.empty())
     {
         fprintf(stderr, "ERROR: input file is required.\n");
         print_help();
@@ -60,7 +61,7 @@ int main(int argc, char **argv)
     }
 
     // Open the input file
-    inFile.open(settings.inputFile.c_str(), std::ios::in | std::ios::binary);
+    inFile.open(options.inputFile.c_str(), std::ios::in | std::ios::binary);
     // Tricky way to check if was oppened correctly.
     // The "is_open" method was failing on cross compiled EXE
     {
@@ -86,7 +87,7 @@ int main(int argc, char **argv)
         {
             // File is a ZISO file, so will be decompressed
             fprintf(stdout, "ZISO file detected. Decompressing...\n");
-            settings.compress = false;
+            options.compress = false;
         }
         else
         {
@@ -95,31 +96,31 @@ int main(int argc, char **argv)
     }
 
     // If no output filename was provided, generate it using the input filename
-    if (settings.outputFile.empty())
+    if (options.outputFile.empty())
     {
         // Remove the extensión
-        std::string rawName = settings.inputFile.substr(0, settings.inputFile.find_last_of("."));
+        std::string rawName = options.inputFile.substr(0, options.inputFile.find_last_of("."));
 
         // Input file will be decoded, so ecm2 extension must be removed (if exists)
-        if (settings.compress)
+        if (options.compress)
         {
-            settings.outputFile = rawName + ".zso";
+            options.outputFile = rawName + ".zso";
         }
         else
         {
-            settings.outputFile = rawName + ".iso";
+            options.outputFile = rawName + ".iso";
         }
     }
 
     // Check if output file exists only if force_rewrite is false
-    if (settings.overwrite == false)
+    if (options.overwrite == false)
     {
         char dummy;
-        outFile.open(settings.outputFile.c_str(), std::ios::in | std::ios::binary);
+        outFile.open(options.outputFile.c_str(), std::ios::in | std::ios::binary);
         if (outFile.read(&dummy, 0))
         {
             fprintf(stderr, "ERROR: Cowardly refusing to replace output file. Use the -f/--force-rewrite options to force it.\n");
-            settings.keepOutput = true;
+            options.keepOutput = true;
             return_code = 1;
             goto exit;
         }
@@ -127,7 +128,7 @@ int main(int argc, char **argv)
     }
 
     // Open the output file in replace mode
-    outFile.open(settings.outputFile.c_str(), std::ios::out | std::ios::binary);
+    outFile.open(options.outputFile.c_str(), std::ios::out | std::ios::binary);
     // Check if file was oppened correctly.
     if (!outFile.good())
     {
@@ -136,7 +137,7 @@ int main(int argc, char **argv)
         goto exit;
     }
 
-    if (settings.compress)
+    if (options.compress)
     {
         // Get the input size
         inFile.seekg(0, std::ios_base::end);
@@ -144,13 +145,13 @@ int main(int argc, char **argv)
         inFile.seekg(0, std::ios_base::beg);
 
         // Get the total blocks
-        blocksNumber = ceil((float)inputSize / settings.blockSize) + 1;
+        blocksNumber = ceil((float)inputSize / options.blockSize) + 1;
         // Calculate the header size
         headerSize = 0x18 + (blocksNumber * sizeof(uint32_t));
 
         // Set the header input size and block size
         fileHeader.uncompressedSize = inputSize;
-        fileHeader.blockSize = settings.blockSize;
+        fileHeader.blockSize = options.blockSize;
 
         // Set shift depending of the input size. Bigger shift means more waste.
         if (inputSize > (0x3FFFFFFFF - headerSize))
@@ -176,20 +177,28 @@ int main(int argc, char **argv)
         // Files with less than 2GB doesn't need to shift.
 
         // Print the sumary
-        fprintf(stderr, "%20s %s\n", "Source:", settings.inputFile.c_str());
-        fprintf(stderr, "%20s %s\n\n", "Destination:", settings.outputFile.c_str());
+        fprintf(stderr, "%20s %s\n", "Source:", options.inputFile.c_str());
+        fprintf(stderr, "%20s %s\n\n", "Destination:", options.outputFile.c_str());
         fprintf(stderr, "%20s %lu bytes\n", "Total File Size:", inputSize);
-        fprintf(stderr, "%20s %d\n", "Block Size:", settings.blockSize);
+        fprintf(stderr, "%20s %d\n", "Block Size:", options.blockSize);
         fprintf(stderr, "%20s %d\n", "Index align:", fileHeader.indexShift);
-        fprintf(stderr, "%20s %d\n", "Compress Level:", settings.compressionLevel);
-        if (settings.lz4hc)
+        fprintf(stderr, "%20s %d\n", "Compress Level:", options.compressionLevel);
+        if (options.lz4hc)
         {
             fprintf(stderr, "%20s Yes\n", "LZ4 HC Compression:");
             // 20
         }
         else
         {
-            fprintf(stderr, "%20s %d\n", "LZ4 acceleration:", lz4_compression_level[settings.compressionLevel - 1]);
+            fprintf(stderr, "%20s %d\n", "LZ4 acceleration:", lz4_compression_level[options.compressionLevel - 1]);
+            if (options.alternativeLz4)
+            {
+                fprintf(stderr, "%20s Yes\n", "LZ4 Mode 2:");
+            }
+            else
+            {
+                fprintf(stderr, "%20s No\n", "LZ4 Mode 2:");
+            }
             fprintf(stderr, "%20s No\n", "LZ4 HC Compression:");
         }
 
@@ -200,8 +209,8 @@ int main(int argc, char **argv)
 
         outFile.write((const char *)blocks.data(), blocksNumber * sizeof(uint32_t));
 
-        readBuffer.resize(settings.blockSize, 0);
-        writeBuffer.resize(settings.blockSize, 0);
+        readBuffer.resize(options.blockSize, 0);
+        writeBuffer.resize(options.blockSize, 0);
 
         for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
         {
@@ -211,7 +220,7 @@ int main(int argc, char **argv)
             // Capture the block position
             uint64_t blockStartPosition = outFile.tellp();
 
-            uint64_t toRead = settings.blockSize;
+            uint64_t toRead = options.blockSize;
             uint64_t leftInFile = inputSize - inFile.tellg();
             if (leftInFile < toRead)
             {
@@ -227,7 +236,7 @@ int main(int argc, char **argv)
                 writeBuffer.data(),
                 writeBuffer.size(),
                 uncompressed,
-                settings);
+                options);
 
             if (compressedBytes > 0)
             {
@@ -274,8 +283,8 @@ int main(int argc, char **argv)
         inFile.read((char *)blocks.data(), blocksNumber * sizeof(uint32_t));
 
         // Print the sumary
-        fprintf(stderr, "%20s %s\n", "Source:", settings.inputFile.c_str());
-        fprintf(stderr, "%20s %s\n\n", "Destination:", settings.outputFile.c_str());
+        fprintf(stderr, "%20s %s\n", "Source:", options.inputFile.c_str());
+        fprintf(stderr, "%20s %s\n\n", "Destination:", options.outputFile.c_str());
         fprintf(stderr, "%20s %lu bytes\n", "Total File Size:", fileHeader.uncompressedSize);
         fprintf(stderr, "%20s %d\n", "Block Size:", fileHeader.blockSize);
         fprintf(stderr, "%20s %d\n", "Index align:", fileHeader.indexShift);
@@ -356,17 +365,17 @@ exit:
     }
     else
     {
-        if (!settings.keepOutput)
+        if (!options.keepOutput)
         {
             // Something went wrong, so output file must be deleted if keep == false
             // We will remove the file if something went wrong
             fprintf(stderr, "\n\nERROR: there was an error processing the input file.\n\n");
-            std::ifstream out_remove_tmp(settings.outputFile.c_str(), std::ios::binary);
+            std::ifstream out_remove_tmp(options.outputFile.c_str(), std::ios::binary);
             char dummy;
             if (out_remove_tmp.read(&dummy, 0))
             {
                 out_remove_tmp.close();
-                if (remove(settings.outputFile.c_str()))
+                if (remove(options.outputFile.c_str()))
                 {
                     fprintf(stderr, "There was an error removing the output file... Please remove it manually.\n");
                 }
@@ -382,25 +391,93 @@ uint32_t compress_block(
     char *dst,
     uint32_t dstSize,
     bool &uncompressed,
-    opt settings)
+    opt options)
 {
     // Try to compress the data into the dst buffer
     uint32_t outSize = 0;
-    if (settings.lz4hc)
+    if (options.bruteForce)
     {
-        LZ4_streamHC_t lz4_state;
-        LZ4_resetStreamHC(&lz4_state, settings.compressionLevel);
-        outSize = LZ4_compress_HC_continue(&lz4_state, src, dst, srcSize, dstSize);
+        // This method will try all the available compression methods to select the most apropiate.
+        uint32_t lz4Size = 0;
+        uint32_t lz4Method2Size = 0;
+        uint32_t lz4HCSize = 0; // This default size will simplify the code when HC is not used
 
-        // outSize = LZ4_compress_HC(src, dst, srcSize, dstSize, settings.compressionLevel);
+        std::vector<char> lz4Buffer(dstSize, 0);
+        std::vector<char> lz4Method2Buffer(dstSize, 0);
+        std::vector<char> lz4HCBuffer(dstSize, 0);
+
+        // Compress using the standard methods
+        // Method 1
+        LZ4_stream_t lz4_state;
+        LZ4_resetStream(&lz4_state);
+        lz4Size = LZ4_compress_fast_continue(&lz4_state, src, lz4Buffer.data(), srcSize, dstSize, lz4_compression_level[options.compressionLevel - 1]);
+        // Method 2
+        lz4Method2Size = LZ4_compress_fast(src, lz4Method2Buffer.data(), srcSize, dstSize, lz4_compression_level[options.compressionLevel - 1]);
+        // HC only if enabled
+        if (options.lz4hc)
+        {
+            LZ4_streamHC_t lz4hc_state;
+            LZ4_resetStreamHC(&lz4hc_state, options.compressionLevel);
+            lz4HCSize = LZ4_compress_HC_continue(&lz4hc_state, src, lz4HCBuffer.data(), srcSize, dstSize);
+        }
+
+        // Set the size to the method1 compression
+        outSize = lz4Size;
+
+        // If method 2 is smaller then update it
+        if (lz4Method2Size < outSize)
+        {
+            outSize = lz4Method2Size;
+        }
+        // If HC is used and size is smaller, then update the outSize again
+        if (options.lz4hc && lz4HCSize < outSize)
+        {
+            outSize = lz4HCSize;
+        }
+
+        // It's time to copy the data buffer
+        if (outSize == lz4Size)
+        {
+            std::memcpy(dst, lz4Buffer.data(), outSize);
+        }
+        else if (outSize == lz4Method2Size)
+        {
+            std::memcpy(dst, lz4Method2Buffer.data(), outSize);
+        }
+        else if (options.lz4hc && outSize == lz4HCSize)
+        {
+            std::memcpy(dst, lz4HCBuffer.data(), outSize);
+        }
+        else
+        {
+            // Something weird happens
+            return 0;
+        }
     }
     else
     {
-        LZ4_stream_t lz4_state;
-        LZ4_resetStream(&lz4_state);
-        outSize = LZ4_compress_fast_continue(&lz4_state, src, dst, srcSize, dstSize, lz4_compression_level[settings.compressionLevel - 1]);
+        if (options.lz4hc)
+        {
 
-        // outSize = LZ4_compress_fast(src, dst, srcSize, dstSize, lz4_compression_level[settings.compressionLevel - 1]);
+            // outSize = LZ4_compress_HC(src, dst, srcSize, dstSize, options.compressionLevel);
+
+            LZ4_streamHC_t lz4_state;
+            LZ4_resetStreamHC(&lz4_state, options.compressionLevel);
+            outSize = LZ4_compress_HC_continue(&lz4_state, src, dst, srcSize, dstSize);
+        }
+        else
+        {
+            if (options.alternativeLz4)
+            {
+                outSize = LZ4_compress_fast(src, dst, srcSize, dstSize, lz4_compression_level[options.compressionLevel - 1]);
+            }
+            else
+            {
+                LZ4_stream_t lz4_state;
+                LZ4_resetStream(&lz4_state);
+                outSize = LZ4_compress_fast_continue(&lz4_state, src, dst, srcSize, dstSize, lz4_compression_level[options.compressionLevel - 1]);
+            }
+        }
     }
 
     // If the block was not compressed because a buffer space problem, or the output is bigger than input
@@ -472,7 +549,7 @@ int get_options(
 
     std::string optarg_s;
 
-    while ((ch = getopt_long(argc, argv, "i:o:c:lb:fkh", long_options, NULL)) != -1)
+    while ((ch = getopt_long(argc, argv, "i:o:c:mhbs:fk", long_options, NULL)) != -1)
     {
         // check to see if a single character or long option came through
         switch (ch)
@@ -514,13 +591,23 @@ int get_options(
             }
             break;
 
-        // short option '-f', long option "--force"
-        case 'l':
+        // short option '-m', long option "--method2-lz4"
+        case 'm':
+            options.alternativeLz4 = true;
+            break;
+
+        // short option '-h', long option "--lz4hc"
+        case 'h':
             options.lz4hc = true;
             break;
 
-        // short option '-b', long option "--block-size"
+        // short option '-f', long option "--force"
         case 'b':
+            options.bruteForce = true;
+            break;
+
+        // short option '-b', long option "--block-size"
+        case 's':
             try
             {
                 optarg_s = optarg;
@@ -555,10 +642,9 @@ int get_options(
             options.keepOutput = true;
             break;
 
-        case 'h':
         case '?':
             print_help();
-            return 0;
+            return 1;
             break;
         }
     }
@@ -580,17 +666,19 @@ void print_help()
             "Optional options:\n"
             "    -c/--compression 1-12\n"
             "           Compression level to be used. By default 12.\n"
-            "    -l/--lz4hc\n"
+            "    -m/--mode2-lz4\n"
+            "           Uses an alternative compression method which will reduce the size in some cases.\n"
+            "    -h/--lz4hc\n"
             "           Uses the LZ4 high compression algorithm to improve the compression ratio.\n"
             "           NOTE: This will create a non standar ZSO and maybe the decompressor will not be compatible.\n"
-            "    -b/--block-size <size>\n"
+            "    -b/--brute-force\n"
+            "           SLOW: Try to compress using the two LZ4 methods. Use -l/--lz4hc to also try using HC.\n"
+            "    -s/--block-size <size>\n"
             "           The size in bytes of the blocks. By default 2048.\n"
             "    -f/--force\n"
             "           Force to ovewrite the output file\n"
             "    -k/--keep-output\n"
             "           Keep the output when something went wrong, otherwise will be removed on error.\n"
-            "    -h/--help\n"
-            "           Show this help message.\n"
             "\n");
 }
 
