@@ -17,9 +17,12 @@ static struct option long_options[] = {
 // global variales
 uint8_t lastProgress = 100; // Force at 0% of progress
 summary summaryData;
+std::string exeName;
 
 int main(int argc, char **argv)
 {
+    std::filesystem::path p(argv[0]);
+    exeName = p.filename().string();
     // Start the timer to measure execution time
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -55,7 +58,7 @@ int main(int argc, char **argv)
 
     if (options.inputFile.empty())
     {
-        fprintf(stderr, "ERROR: input file is required.\n");
+        fprintf(stderr, "\n\nERROR: input file is required.\n\n");
         print_help();
         return_code = 1;
         goto exit;
@@ -69,7 +72,7 @@ int main(int argc, char **argv)
         char dummy;
         if (!inFile.read(&dummy, 0))
         {
-            fprintf(stderr, "ERROR: input file cannot be opened.\n");
+            fprintf(stderr, "\n\nERROR: input file cannot be opened.\n\n");
             return_code = 1;
             goto exit;
         }
@@ -120,7 +123,7 @@ int main(int argc, char **argv)
         outFile.open(options.outputFile.c_str(), std::ios::in | std::ios::binary);
         if (outFile.read(&dummy, 0))
         {
-            fprintf(stderr, "ERROR: Cowardly refusing to replace output file. Use the -f/--force-rewrite options to force it.\n");
+            fprintf(stderr, "\nERROR: Cowardly refusing to replace output file. Use the -f/--force-rewrite options to force it.\n\n");
             options.keepOutput = true;
             return_code = 1;
             goto exit;
@@ -133,7 +136,7 @@ int main(int argc, char **argv)
     // Check if file was oppened correctly.
     if (!outFile.good())
     {
-        fprintf(stderr, "ERROR: output file cannot be opened.\n");
+        fprintf(stderr, "\n\nERROR: output file cannot be opened.\n\n");
         return_code = 1;
         goto exit;
     }
@@ -257,7 +260,7 @@ int main(int argc, char **argv)
             }
             else
             {
-                fprintf(stderr, "ERROR: There was an error compressing the source file.\n");
+                fprintf(stderr, "\n\nERROR: There was an error compressing the source file.\n\n");
                 return_code = 1;
                 goto exit;
             }
@@ -353,7 +356,7 @@ int main(int argc, char **argv)
             }
             else
             {
-                fprintf(stderr, "ERROR: There was an error decompressing the source file.\n");
+                fprintf(stderr, "\n\nERROR: There was an error decompressing the source file.\n\n");
                 return_code = 1;
                 goto exit;
             }
@@ -622,7 +625,7 @@ int get_options(
 
                 if (temp_argument < 1 || temp_argument > 12)
                 {
-                    fprintf(stderr, "ERROR: the provided compression level option is not correct.\n\n");
+                    fprintf(stderr, "\n\nERROR: the provided compression level option is not correct.\n\n");
                     print_help();
                     return 1;
                 }
@@ -633,7 +636,7 @@ int get_options(
             }
             catch (std::exception const &e)
             {
-                fprintf(stderr, "ERROR: the provided compression level is not correct.\n\n");
+                fprintf(stderr, "\n\nERROR: the provided compression level is not correct.\n\n");
                 print_help();
                 return 1;
             }
@@ -663,7 +666,7 @@ int get_options(
 
                 if (!temp_argument || temp_argument < 512)
                 {
-                    fprintf(stderr, "ERROR: the provided block size is not correct. Must be at least 512\n\n");
+                    fprintf(stderr, "\n\nERROR: the provided block size is not correct. Must be at least 512\n\n");
                     print_help();
                     return 1;
                 }
@@ -674,7 +677,7 @@ int get_options(
             }
             catch (std::exception const &e)
             {
-                fprintf(stderr, "ERROR: the provided block size is not correct.\n\n");
+                fprintf(stderr, "\n\nERROR: the provided block size is not correct.\n\n");
                 print_help();
                 return 1;
             }
@@ -707,10 +710,10 @@ void print_help()
             "Usage:\n"
             "\n"
             "The program detects ziso sources and selects the decompression mode:\n"
-            "    ecmtool -i/--input example.iso\n"
-            "    ecmtool -i/--input example.iso -o/--output example.zso\n"
-            "    ecmtool -i/--input example.zso\n"
-            "    ecmtool -i/--input example.zso -o/--output example.iso\n"
+            "    %s -i/--input example.iso\n"
+            "    %s -i/--input example.iso -o/--output example.zso\n"
+            "    %s -i/--input example.zso\n"
+            "    %s -i/--input example.zso -o/--output example.iso\n"
             "Optional options:\n"
             "    -c/--compression 1-12\n"
             "           Compression level to be used. By default 12.\n"
@@ -727,7 +730,8 @@ void print_help()
             "           Force to ovewrite the output file\n"
             "    -k/--keep-output\n"
             "           Keep the output when something went wrong, otherwise will be removed on error.\n"
-            "\n");
+            "\n",
+            exeName.c_str(), exeName.c_str(), exeName.c_str(), exeName.c_str());
 }
 
 static void progress_compress(uint64_t currentInput, uint64_t totalInput, uint64_t currentOutput)
