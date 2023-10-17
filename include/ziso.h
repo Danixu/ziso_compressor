@@ -47,6 +47,13 @@ uint16_t lz4_compression_level[12] = {
     uint16_t(LZ4_MAX_ACCELERATION *((float)1 / 11)),
     1};
 
+// MB Macro
+#define MB(x) ((float)(x) / 1024 / 1024)
+
+// Max Cache Size
+#define CACHE_SIZE_MAX 134217728    // 128MB
+#define CACHE_SIZE_DEFAULT 16777216 // 16MB
+
 #pragma pack(push)
 #pragma pack(1)
 struct zheader
@@ -90,9 +97,6 @@ struct summary
     uint64_t rawCount = 0;
     uint64_t raw = 0;
 } summary_struct;
-
-// MB Macro
-#define MB(x) ((float)(x) / 1024 / 1024)
 
 ///////////////////////////////
 //

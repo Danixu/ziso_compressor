@@ -41,8 +41,8 @@ int main(int argc, char **argv)
     uint32_t headerSize;
 
     // Buffers
-    std::vector<char> readBuffer;
-    std::vector<char> writeBuffer;
+    std::vector<char> blockReadBuffer;
+    std::vector<char> blockWriteBuffer;
     // Blocks data
     std::vector<uint32_t> blocks;
 
@@ -78,7 +78,7 @@ int main(int argc, char **argv)
         }
     }
 
-    // Check if the file is an ECM3 File
+    // Check if the file is a ZISO File
     {
         char file_format[5] = {0};
         inFile.read(file_format, 4);
@@ -225,11 +225,29 @@ int main(int argc, char **argv)
 
         outFile.write((const char *)blocks.data(), blocksNumber * sizeof(uint32_t));
 
-        readBuffer.resize(options.blockSize, 0);
-        writeBuffer.resize(options.blockSize, 0);
+        blockReadBuffer.resize(options.blockSize, 0);
+        blockWriteBuffer.resize(options.blockSize, 0);
+
+        // Read buffer. To make it easier to manage, we will create a buffer with a size of a multiple of the blockSize.
+        uint32_t readBufferSize = CACHE_SIZE_DEFAULT - (CACHE_SIZE_DEFAULT % options.blockSize);
+        uint32_t readBufferPos = readBufferSize; // Set the position to the End Of Buffer to force a fill at the first loop.
+        if (inputSize < readBufferSize)
+        {
+            readBufferSize = inputSize - (inputSize % options.blockSize);
+        }
+        std::vector<char> readBuffer(readBufferSize, 0);
+        // Write buffer. The output block size is not fixed, so cannot be calculated and we will use the cache size.
+        uint32_t currentWriteBufferPos = 0;
+        std::vector<char> writeBuffer(CACHE_SIZE_DEFAULT, 0);
 
         for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
         {
+            // If the current reader position is the end of the buffer, fill the buffer with new data
+            if (readBufferPos >= (readBufferSize - 1))
+            {
+                inFile.read(readBuffer.data(), readBufferSize);
+                readBufferPos = 0;
+            }
             // Fill the output with zeroes until a valid start point depending of index shift
             file_align(outFile, fileHeader.indexShift);
 
@@ -237,26 +255,26 @@ int main(int argc, char **argv)
             uint64_t blockStartPosition = outFile.tellp();
 
             uint64_t toRead = options.blockSize;
-            uint64_t leftInFile = inputSize - inFile.tellg();
+            uint64_t leftInFile = inputSize - ((uint64_t)inFile.tellg() - ((readBufferSize - 1) - readBufferPos));
             if (leftInFile < toRead)
             {
                 toRead = leftInFile;
             }
 
-            inFile.read(readBuffer.data(), toRead);
-
             bool uncompressed = false;
             int compressedBytes = compress_block(
-                readBuffer.data(),
+                readBuffer.data() + readBufferPos,
                 toRead,
-                writeBuffer.data(),
-                writeBuffer.size(),
+                blockWriteBuffer.data(),
+                blockWriteBuffer.size(),
                 uncompressed,
                 options);
 
+            readBufferPos += toRead;
+
             if (compressedBytes > 0)
             {
-                outFile.write(writeBuffer.data(), compressedBytes);
+                outFile.write(blockWriteBuffer.data(), compressedBytes);
             }
             else
             {
@@ -321,8 +339,8 @@ int main(int argc, char **argv)
 
         // Maybe not all the programs will try the best between compressed and uncompressed data
         // so reserve the double of read buffer space to be able to read >blockSize compressed blocks.
-        readBuffer.resize(fileHeader.blockSize * 2, 0);
-        writeBuffer.resize(fileHeader.blockSize, 0);
+        blockReadBuffer.resize(fileHeader.blockSize * 2, 0);
+        blockWriteBuffer.resize(fileHeader.blockSize, 0);
 
         for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
         {
@@ -341,18 +359,18 @@ int main(int argc, char **argv)
             }
 
             // Read the block data
-            inFile.read(readBuffer.data(), currentBlockSize);
+            inFile.read(blockReadBuffer.data(), currentBlockSize);
 
             int decompressedBytes = decompress_block(
-                readBuffer.data(),
+                blockReadBuffer.data(),
                 currentBlockSize,
-                writeBuffer.data(),
-                writeBuffer.size(),
+                blockWriteBuffer.data(),
+                blockWriteBuffer.size(),
                 uncompressed);
 
             if (decompressedBytes > 0)
             {
-                outFile.write(writeBuffer.data(), decompressedBytes);
+                outFile.write(blockWriteBuffer.data(), decompressedBytes);
             }
             else
             {
