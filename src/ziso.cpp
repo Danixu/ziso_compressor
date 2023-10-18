@@ -40,9 +40,6 @@ int main(int argc, char **argv)
     uint32_t blocksNumber;
     uint32_t headerSize;
 
-    // Buffers
-    std::vector<char> blockReadBuffer;
-    std::vector<char> blockWriteBuffer;
     // Blocks data
     std::vector<uint32_t> blocks;
 
@@ -225,9 +222,6 @@ int main(int argc, char **argv)
 
         outFile.write((const char *)blocks.data(), blocksNumber * sizeof(uint32_t));
 
-        blockReadBuffer.resize(options.blockSize, 0);
-        blockWriteBuffer.resize(options.blockSize, 0);
-
         // Read buffer. To make it easier to manage, we will create a buffer with a size of a multiple of the blockSize.
         uint32_t readBufferSize = CACHE_SIZE_DEFAULT - (CACHE_SIZE_DEFAULT % options.blockSize);
         uint32_t readBufferPos = readBufferSize; // Set the position to the End Of Buffer to force a fill at the first loop.
@@ -237,7 +231,7 @@ int main(int argc, char **argv)
         }
         std::vector<char> readBuffer(readBufferSize, 0);
         // Write buffer. The output block size is not fixed, so cannot be calculated and we will use the cache size.
-        uint32_t currentWriteBufferPos = 0;
+        uint32_t writeBufferPos = 0;
         std::vector<char> writeBuffer(CACHE_SIZE_DEFAULT, 0);
 
         for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
@@ -249,10 +243,12 @@ int main(int argc, char **argv)
                 readBufferPos = 0;
             }
             // Fill the output with zeroes until a valid start point depending of index shift
-            file_align(outFile, fileHeader.indexShift);
+            uint16_t alignment = buffer_align(writeBuffer.data() + writeBufferPos, (uint64_t)outFile.tellp() + writeBufferPos, fileHeader.indexShift);
+            writeBufferPos += alignment;
+            // file_align(outFile, fileHeader.indexShift);
 
             // Capture the block position
-            uint64_t blockStartPosition = outFile.tellp();
+            uint64_t blockStartPosition = (uint64_t)outFile.tellp() + writeBufferPos;
 
             uint64_t toRead = options.blockSize;
             uint64_t leftInFile = inputSize - ((uint64_t)inFile.tellg() - ((readBufferSize - 1) - readBufferPos));
@@ -265,8 +261,8 @@ int main(int argc, char **argv)
             int compressedBytes = compress_block(
                 readBuffer.data() + readBufferPos,
                 toRead,
-                blockWriteBuffer.data(),
-                blockWriteBuffer.size(),
+                writeBuffer.data() + writeBufferPos,
+                options.blockSize,
                 uncompressed,
                 options);
 
@@ -274,7 +270,14 @@ int main(int argc, char **argv)
 
             if (compressedBytes > 0)
             {
-                outFile.write(blockWriteBuffer.data(), compressedBytes);
+                writeBufferPos += compressedBytes;
+                if (
+                    ((writeBuffer.size() - writeBufferPos) < (options.blockSize * 2)) ||
+                    (currentBlock == (blocksNumber - 2)))
+                {
+                    outFile.write(writeBuffer.data(), writeBufferPos);
+                    writeBufferPos = 0;
+                }
             }
             else
             {
@@ -287,7 +290,7 @@ int main(int argc, char **argv)
             blocks[currentBlock] = (blockStartPosition >> fileHeader.indexShift) | (uncompressed << 31);
 
             // Update the progress
-            progress_compress(inFile.tellg(), inputSize, (uint64_t)outFile.tellp() - headerSize);
+            progress_compress((uint64_t)inFile.tellg() + readBufferPos, inputSize, (uint64_t)blockStartPosition - headerSize);
         }
 
         // Align the file and set the eof position block
@@ -339,8 +342,8 @@ int main(int argc, char **argv)
 
         // Maybe not all the programs will try the best between compressed and uncompressed data
         // so reserve the double of read buffer space to be able to read >blockSize compressed blocks.
-        blockReadBuffer.resize(fileHeader.blockSize * 2, 0);
-        blockWriteBuffer.resize(fileHeader.blockSize, 0);
+        std::vector<char> blockReadBuffer(fileHeader.blockSize * 2, 0);
+        std::vector<char> blockWriteBuffer(fileHeader.blockSize, 0);
 
         for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
         {
@@ -605,6 +608,18 @@ void file_align(std::fstream &fOut, uint8_t shift)
             fOut.write("\0", 1);
         }
     }
+}
+
+uint16_t buffer_align(char *buffer, uint64_t currentPosition, uint8_t shift)
+{
+    uint16_t paddingLostBytes = currentPosition % (1 << shift);
+    if (paddingLostBytes)
+    {
+        uint16_t alignment = (1 << shift) - paddingLostBytes;
+        std::memset(buffer, 0, alignment);
+        return alignment;
+    }
+    return 0;
 }
 
 int get_options(

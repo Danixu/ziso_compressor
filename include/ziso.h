@@ -132,6 +132,10 @@ void file_align(
     std::fstream &fOut,
     uint8_t shift);
 
+uint16_t buffer_align(
+    char *buffer,
+    uint64_t currentPosition,
+    uint8_t shift);
 /**
  * @brief Prints the help message
  *
