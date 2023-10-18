@@ -10,6 +10,7 @@ static struct option long_options[] = {
     {"lz4hc", no_argument, NULL, 'h'},
     {"brute-force", no_argument, NULL, 'b'},
     {"block-size", required_argument, NULL, 's'},
+    {"cache-size", required_argument, NULL, 'z'},
     {"force", no_argument, NULL, 'f'},
     {"keep-output", no_argument, NULL, 'k'},
     {NULL, 0, NULL, 0}};
@@ -223,7 +224,7 @@ int main(int argc, char **argv)
         outFile.write((const char *)blocks.data(), blocksNumber * sizeof(uint32_t));
 
         // Read buffer. To make it easier to manage, we will create a buffer with a size of a multiple of the blockSize.
-        uint32_t readBufferSize = CACHE_SIZE_DEFAULT - (CACHE_SIZE_DEFAULT % options.blockSize);
+        uint32_t readBufferSize = options.cacheSize - (options.cacheSize % options.blockSize);
         uint32_t readBufferPos = readBufferSize; // Set the position to the End Of Buffer to force a fill at the first loop.
         if (inputSize < readBufferSize)
         {
@@ -232,7 +233,7 @@ int main(int argc, char **argv)
         std::vector<char> readBuffer(readBufferSize, 0);
         // Write buffer. The output block size is not fixed, so cannot be calculated and we will use the cache size.
         uint32_t writeBufferPos = 0;
-        std::vector<char> writeBuffer(CACHE_SIZE_DEFAULT, 0);
+        std::vector<char> writeBuffer(options.cacheSize, 0);
 
         for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
         {
@@ -633,7 +634,7 @@ int get_options(
 
     std::string optarg_s;
 
-    while ((ch = getopt_long(argc, argv, "i:o:c:mhbs:fk", long_options, NULL)) != -1)
+    while ((ch = getopt_long(argc, argv, "i:o:c:mhbs:z:fk", long_options, NULL)) != -1)
     {
         // check to see if a single character or long option came through
         switch (ch)
@@ -685,12 +686,12 @@ int get_options(
             options.lz4hc = true;
             break;
 
-        // short option '-f', long option "--force"
+        // short option '-b', long option "--brute-force"
         case 'b':
             options.bruteForce = true;
             break;
 
-        // short option '-b', long option "--block-size"
+        // short option '-s', long option "--block-size"
         case 's':
             try
             {
@@ -706,6 +707,44 @@ int get_options(
                 else
                 {
                     options.blockSize = (uint8_t)temp_argument;
+                }
+            }
+            catch (std::exception const &e)
+            {
+                fprintf(stderr, "\n\nERROR: the provided block size is not correct.\n\n");
+                print_help();
+                return 1;
+            }
+            break;
+
+        // short option '-z', long option "--cache-size"
+        case 'z':
+            try
+            {
+                optarg_s = optarg;
+                temp_argument = std::stoi(optarg_s);
+
+                if (!temp_argument)
+                {
+                    fprintf(stderr, "\n\nERROR: the provided cache size is not correct.\n\n");
+                    print_help();
+                    return 1;
+                }
+                else if (temp_argument > CACHE_SIZE_MAX)
+                {
+                    fprintf(stderr, "\n\nERROR: the provided cache size is not correct. Must be less than %luMB\n\n", CACHE_SIZE_MAX);
+                    print_help();
+                    return 1;
+                }
+                else if (temp_argument < 1)
+                {
+                    fprintf(stderr, "\n\nERROR: the provided cache size is not correct. Must be at least 1MB\n\n");
+                    print_help();
+                    return 1;
+                }
+                else
+                {
+                    options.cacheSize = (uint32_t)temp_argument * (1024 * 1024);
                 }
             }
             catch (std::exception const &e)
@@ -759,12 +798,14 @@ void print_help()
             "           SLOW: Try to compress using the two LZ4 methods. LZ4HC already selects the best compression method.\n"
             "    -s/--block-size <size>\n"
             "           The size in bytes of the blocks. By default 2048.\n"
+            "    -z/--cache-size <size>\n"
+            "           The size of the cache buffer in MB. By default %d. Memory usage will be the double (%dMB Read + %dMB Write).\n"
             "    -f/--force\n"
             "           Force to ovewrite the output file\n"
             "    -k/--keep-output\n"
             "           Keep the output when something went wrong, otherwise will be removed on error.\n"
             "\n",
-            exeName.c_str(), exeName.c_str(), exeName.c_str(), exeName.c_str());
+            exeName.c_str(), exeName.c_str(), exeName.c_str(), exeName.c_str(), CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT);
 }
 
 static void progress_compress(uint64_t currentInput, uint64_t totalInput, uint64_t currentOutput)

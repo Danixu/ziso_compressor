@@ -51,8 +51,8 @@ uint16_t lz4_compression_level[12] = {
 #define MB(x) ((float)(x) / 1024 / 1024)
 
 // Max Cache Size
-#define CACHE_SIZE_MAX 134217728    // 128MB
-#define CACHE_SIZE_DEFAULT 16777216 // 16MB
+#define CACHE_SIZE_MAX 128
+#define CACHE_SIZE_DEFAULT 4
 
 #pragma pack(push)
 #pragma pack(1)
@@ -74,6 +74,7 @@ struct opt
     std::string outputFile = "";
     bool compress = true;
     uint32_t blockSize = 2048;
+    uint32_t cacheSize = CACHE_SIZE_DEFAULT * (1024 * 1024);
     uint8_t compressionLevel = 12;
     bool alternativeLz4 = false;
     bool bruteForce = false;
