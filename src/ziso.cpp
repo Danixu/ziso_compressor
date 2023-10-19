@@ -151,6 +151,16 @@ int main(int argc, char **argv)
         // Calculate the header size
         headerSize = 0x18 + (blocksNumber * sizeof(uint32_t));
 
+        if (!options.blockSizeFixed)
+        {
+            if (is_cdrom(inFile))
+            {
+                fprintf(stderr, "\nWARNING: CD-ROM detected... Changing the block size to 2352.\n");
+                fprintf(stderr, "If you want to keep the original block size please use the '--block-size 2048' option.\n\n");
+                options.blockSize = 2352;
+            }
+        }
+
         // Set the header input size and block size
         fileHeader.uncompressedSize = inputSize;
         fileHeader.blockSize = options.blockSize;
@@ -632,6 +642,31 @@ inline uint32_t decompress_block(
     }
 }
 
+bool is_cdrom(std::fstream &fIn)
+{
+    // Store the current position
+    uint64_t currentPos = fIn.tellg();
+
+    // Seek to the start point
+    fIn.seekg(0);
+
+    // Read three sectors to ensure that the disk is a CDROM
+    std::vector<char> buffer(12, 0);
+    unsigned char cdSync[] = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00};
+    for (uint8_t i = 0; i < 3; i++)
+    {
+        fIn.seekg(i * 2352);
+        fIn.read(buffer.data(), buffer.size());
+
+        if (
+            std::strncmp(buffer.data(), (char *)cdSync, 12) != 0)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 void file_align(std::fstream &fOut, uint8_t shift)
 {
     uint16_t paddingLostBytes = fOut.tellp() % (1 << shift);
@@ -741,6 +776,7 @@ int get_options(
                 else
                 {
                     options.blockSize = (uint8_t)temp_argument;
+                    options.blockSizeFixed = true;
                 }
             }
             catch (std::exception const &e)

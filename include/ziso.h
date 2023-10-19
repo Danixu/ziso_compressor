@@ -73,6 +73,7 @@ struct opt
     std::string inputFile = "";
     std::string outputFile = "";
     bool compress = true;
+    bool blockSizeFixed = false;
     uint32_t blockSize = 2048;
     uint32_t cacheSize = CACHE_SIZE_DEFAULT * (1024 * 1024);
     uint8_t compressionLevel = 12;
@@ -128,6 +129,8 @@ inline uint32_t decompress_block(
     char *dst,
     uint32_t dstSize,
     bool uncompressed);
+
+bool is_cdrom(std::fstream &fIn);
 
 void file_align(
     std::fstream &fOut,
