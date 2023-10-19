@@ -10,6 +10,7 @@ static struct option long_options[] = {
     {"lz4hc", no_argument, NULL, 'h'},
     {"brute-force", no_argument, NULL, 'b'},
     {"block-size", required_argument, NULL, 's'},
+    {"cache-size", required_argument, NULL, 'z'},
     {"force", no_argument, NULL, 'f'},
     {"keep-output", no_argument, NULL, 'k'},
     {NULL, 0, NULL, 0}};
@@ -40,9 +41,6 @@ int main(int argc, char **argv)
     uint32_t blocksNumber;
     uint32_t headerSize;
 
-    // Buffers
-    std::vector<char> readBuffer;
-    std::vector<char> writeBuffer;
     // Blocks data
     std::vector<uint32_t> blocks;
 
@@ -78,7 +76,7 @@ int main(int argc, char **argv)
         }
     }
 
-    // Check if the file is an ECM3 File
+    // Check if the file is a ZISO File
     {
         char file_format[5] = {0};
         inFile.read(file_format, 4);
@@ -225,38 +223,62 @@ int main(int argc, char **argv)
 
         outFile.write((const char *)blocks.data(), blocksNumber * sizeof(uint32_t));
 
-        readBuffer.resize(options.blockSize, 0);
-        writeBuffer.resize(options.blockSize, 0);
+        // Read buffer. To make it easier to manage, we will create a buffer with a size of a multiple of the blockSize.
+        uint32_t readBufferSize = options.cacheSize - (options.cacheSize % options.blockSize);
+        if (inputSize < readBufferSize)
+        {
+            readBufferSize = inputSize - (inputSize % options.blockSize);
+        }
+        uint32_t readBufferPos = readBufferSize; // Set the position to the End Of Buffer to force a fill at the first loop.
+        std::vector<char> readBuffer(readBufferSize, 0);
+        // Write buffer. The output block size is not fixed, so cannot be calculated and we will use the cache size.
+        uint32_t writeBufferPos = 0;
+        std::vector<char> writeBuffer(options.cacheSize, 0);
 
         for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
         {
+            // If the current reader position is the end of the buffer, fill the buffer with new data
+            if (readBufferPos >= (readBufferSize - 1))
+            {
+                inFile.read(readBuffer.data(), readBufferSize);
+                readBufferPos = 0;
+            }
             // Fill the output with zeroes until a valid start point depending of index shift
-            file_align(outFile, fileHeader.indexShift);
+            uint16_t alignment = buffer_align(writeBuffer.data() + writeBufferPos, (uint64_t)outFile.tellp() + writeBufferPos, fileHeader.indexShift);
+            writeBufferPos += alignment;
+            // file_align(outFile, fileHeader.indexShift);
 
             // Capture the block position
-            uint64_t blockStartPosition = outFile.tellp();
+            uint64_t blockStartPosition = (uint64_t)outFile.tellp() + writeBufferPos;
 
             uint64_t toRead = options.blockSize;
-            uint64_t leftInFile = inputSize - inFile.tellg();
+            uint64_t leftInFile = inputSize - ((uint64_t)inFile.tellg() - ((readBufferSize - 1) - readBufferPos));
             if (leftInFile < toRead)
             {
                 toRead = leftInFile;
             }
 
-            inFile.read(readBuffer.data(), toRead);
-
             bool uncompressed = false;
             int compressedBytes = compress_block(
-                readBuffer.data(),
+                readBuffer.data() + readBufferPos,
                 toRead,
-                writeBuffer.data(),
-                writeBuffer.size(),
+                writeBuffer.data() + writeBufferPos,
+                options.blockSize,
                 uncompressed,
                 options);
 
+            readBufferPos += toRead;
+
             if (compressedBytes > 0)
             {
-                outFile.write(writeBuffer.data(), compressedBytes);
+                writeBufferPos += compressedBytes;
+                if (
+                    ((writeBuffer.size() - writeBufferPos) < (options.blockSize * 2)) ||
+                    (currentBlock == (blocksNumber - 2)))
+                {
+                    outFile.write(writeBuffer.data(), writeBufferPos);
+                    writeBufferPos = 0;
+                }
             }
             else
             {
@@ -269,7 +291,7 @@ int main(int argc, char **argv)
             blocks[currentBlock] = (blockStartPosition >> fileHeader.indexShift) | (uncompressed << 31);
 
             // Update the progress
-            progress_compress(inFile.tellg(), inputSize, (uint64_t)outFile.tellp() - headerSize);
+            progress_compress((uint64_t)inFile.tellg() + readBufferPos, inputSize, (uint64_t)blockStartPosition - headerSize);
         }
 
         // Align the file and set the eof position block
@@ -319,10 +341,18 @@ int main(int argc, char **argv)
             goto exit;
         }
 
-        // Maybe not all the programs will try the best between compressed and uncompressed data
-        // so reserve the double of read buffer space to be able to read >blockSize compressed blocks.
-        readBuffer.resize(fileHeader.blockSize * 2, 0);
-        writeBuffer.resize(fileHeader.blockSize, 0);
+        // Read buffer. The input block size is not fixed, so cannot be calculated and we will use the cache size.
+        uint32_t readBufferSize = options.cacheSize;
+        if (inputSize < readBufferSize)
+        {
+            readBufferSize = inputSize;
+        }
+        uint32_t readBufferPos = readBufferSize; // Set the position to the End Of Buffer to force a fill at the first loop.
+        std::vector<char> readBuffer(readBufferSize, 0);
+        // Write buffer. To make it easier to manage, we will create a buffer with a size of a multiple of the blockSize.
+        uint32_t writeBufferSize = options.cacheSize - (options.cacheSize % options.blockSize);
+        uint32_t writeBufferPos = 0;
+        std::vector<char> writeBuffer(writeBufferSize, 0);
 
         for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
         {
@@ -330,6 +360,26 @@ int main(int argc, char **argv)
             uint64_t blockStartPosition = uint64_t(blocks[currentBlock] & 0x7FFFFFFF) << fileHeader.indexShift;
             uint64_t blockEndPosition = uint64_t(blocks[currentBlock + 1] & 0x7FFFFFFF) << fileHeader.indexShift;
             uint64_t currentBlockSize = blockEndPosition - blockStartPosition;
+
+            uint32_t leftInReadBuffer = readBufferSize - readBufferPos;
+            //  If the current reader position is the end of the buffer, fill the buffer with new data
+            if (currentBlockSize > leftInReadBuffer)
+            {
+                // Get the data left in file
+                uint64_t leftInFile = inputSize - inFile.tellg();
+
+                // To Read
+                uint64_t toRead = readBufferSize - leftInReadBuffer;
+                if (toRead > leftInFile)
+                {
+                    toRead = leftInFile;
+                }
+
+                // Move the data buffer to the start point
+                std::memmove(readBuffer.data(), readBuffer.data() + readBufferPos, leftInReadBuffer);
+                inFile.read(readBuffer.data() + leftInReadBuffer, toRead);
+                readBufferPos = 0;
+            }
 
             // The current block size cannot exceed 2 x blockSize.
             if (currentBlockSize > (fileHeader.blockSize * 2))
@@ -340,19 +390,25 @@ int main(int argc, char **argv)
                 goto exit;
             }
 
-            // Read the block data
-            inFile.read(readBuffer.data(), currentBlockSize);
-
             int decompressedBytes = decompress_block(
-                readBuffer.data(),
+                readBuffer.data() + readBufferPos,
                 currentBlockSize,
-                writeBuffer.data(),
-                writeBuffer.size(),
+                writeBuffer.data() + writeBufferPos,
+                options.blockSize,
                 uncompressed);
 
             if (decompressedBytes > 0)
             {
-                outFile.write(writeBuffer.data(), decompressedBytes);
+                readBufferPos += currentBlockSize;
+                writeBufferPos += decompressedBytes;
+
+                if (
+                    writeBufferPos >= (writeBufferSize - 1) ||
+                    (currentBlock == (blocksNumber - 2)))
+                {
+                    outFile.write(writeBuffer.data(), writeBufferPos);
+                    writeBufferPos = 0;
+                }
             }
             else
             {
@@ -589,6 +645,18 @@ void file_align(std::fstream &fOut, uint8_t shift)
     }
 }
 
+uint16_t buffer_align(char *buffer, uint64_t currentPosition, uint8_t shift)
+{
+    uint16_t paddingLostBytes = currentPosition % (1 << shift);
+    if (paddingLostBytes)
+    {
+        uint16_t alignment = (1 << shift) - paddingLostBytes;
+        std::memset(buffer, 0, alignment);
+        return alignment;
+    }
+    return 0;
+}
+
 int get_options(
     int argc,
     char **argv,
@@ -600,7 +668,7 @@ int get_options(
 
     std::string optarg_s;
 
-    while ((ch = getopt_long(argc, argv, "i:o:c:mhbs:fk", long_options, NULL)) != -1)
+    while ((ch = getopt_long(argc, argv, "i:o:c:mhbs:z:fk", long_options, NULL)) != -1)
     {
         // check to see if a single character or long option came through
         switch (ch)
@@ -652,12 +720,12 @@ int get_options(
             options.lz4hc = true;
             break;
 
-        // short option '-f', long option "--force"
+        // short option '-b', long option "--brute-force"
         case 'b':
             options.bruteForce = true;
             break;
 
-        // short option '-b', long option "--block-size"
+        // short option '-s', long option "--block-size"
         case 's':
             try
             {
@@ -673,6 +741,44 @@ int get_options(
                 else
                 {
                     options.blockSize = (uint8_t)temp_argument;
+                }
+            }
+            catch (std::exception const &e)
+            {
+                fprintf(stderr, "\n\nERROR: the provided block size is not correct.\n\n");
+                print_help();
+                return 1;
+            }
+            break;
+
+        // short option '-z', long option "--cache-size"
+        case 'z':
+            try
+            {
+                optarg_s = optarg;
+                temp_argument = std::stoi(optarg_s);
+
+                if (!temp_argument)
+                {
+                    fprintf(stderr, "\n\nERROR: the provided cache size is not correct.\n\n");
+                    print_help();
+                    return 1;
+                }
+                else if (temp_argument > CACHE_SIZE_MAX)
+                {
+                    fprintf(stderr, "\n\nERROR: the provided cache size is not correct. Must be less than %luMB\n\n", CACHE_SIZE_MAX);
+                    print_help();
+                    return 1;
+                }
+                else if (temp_argument < 1)
+                {
+                    fprintf(stderr, "\n\nERROR: the provided cache size is not correct. Must be at least 1MB\n\n");
+                    print_help();
+                    return 1;
+                }
+                else
+                {
+                    options.cacheSize = (uint32_t)temp_argument * (1024 * 1024);
                 }
             }
             catch (std::exception const &e)
@@ -726,12 +832,14 @@ void print_help()
             "           SLOW: Try to compress using the two LZ4 methods. LZ4HC already selects the best compression method.\n"
             "    -s/--block-size <size>\n"
             "           The size in bytes of the blocks. By default 2048.\n"
+            "    -z/--cache-size <size>\n"
+            "           The size of the cache buffer in MB. By default %d. Memory usage will be the double (%dMB Read + %dMB Write).\n"
             "    -f/--force\n"
             "           Force to ovewrite the output file\n"
             "    -k/--keep-output\n"
             "           Keep the output when something went wrong, otherwise will be removed on error.\n"
             "\n",
-            exeName.c_str(), exeName.c_str(), exeName.c_str(), exeName.c_str());
+            exeName.c_str(), exeName.c_str(), exeName.c_str(), exeName.c_str(), CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT);
 }
 
 static void progress_compress(uint64_t currentInput, uint64_t totalInput, uint64_t currentOutput)

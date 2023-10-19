@@ -47,6 +47,13 @@ uint16_t lz4_compression_level[12] = {
     uint16_t(LZ4_MAX_ACCELERATION *((float)1 / 11)),
     1};
 
+// MB Macro
+#define MB(x) ((float)(x) / 1024 / 1024)
+
+// Max Cache Size
+#define CACHE_SIZE_MAX 128
+#define CACHE_SIZE_DEFAULT 4
+
 #pragma pack(push)
 #pragma pack(1)
 struct zheader
@@ -67,6 +74,7 @@ struct opt
     std::string outputFile = "";
     bool compress = true;
     uint32_t blockSize = 2048;
+    uint32_t cacheSize = CACHE_SIZE_DEFAULT * (1024 * 1024);
     uint8_t compressionLevel = 12;
     bool alternativeLz4 = false;
     bool bruteForce = false;
@@ -90,9 +98,6 @@ struct summary
     uint64_t rawCount = 0;
     uint64_t raw = 0;
 } summary_struct;
-
-// MB Macro
-#define MB(x) ((float)(x) / 1024 / 1024)
 
 ///////////////////////////////
 //
@@ -128,6 +133,10 @@ void file_align(
     std::fstream &fOut,
     uint8_t shift);
 
+uint16_t buffer_align(
+    char *buffer,
+    uint64_t currentPosition,
+    uint8_t shift);
 /**
  * @brief Prints the help message
  *
