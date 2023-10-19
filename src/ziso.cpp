@@ -354,11 +354,6 @@ int main(int argc, char **argv)
         uint32_t writeBufferPos = 0;
         std::vector<char> writeBuffer(writeBufferSize, 0);
 
-        // Maybe not all the programs will try the best between compressed and uncompressed data
-        // so reserve the double of read buffer space to be able to read >blockSize compressed blocks.
-        std::vector<char> blockReadBuffer(fileHeader.blockSize * 2, 0);
-        std::vector<char> blockWriteBuffer(fileHeader.blockSize, 0);
-
         for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
         {
             bool uncompressed = blocks[currentBlock] & 0x80000000;
@@ -398,14 +393,22 @@ int main(int argc, char **argv)
             int decompressedBytes = decompress_block(
                 readBuffer.data() + readBufferPos,
                 currentBlockSize,
-                blockWriteBuffer.data(),
-                blockWriteBuffer.size(),
+                writeBuffer.data() + writeBufferPos,
+                options.blockSize,
                 uncompressed);
 
             if (decompressedBytes > 0)
             {
                 readBufferPos += currentBlockSize;
-                outFile.write(blockWriteBuffer.data(), decompressedBytes);
+                writeBufferPos += decompressedBytes;
+
+                if (
+                    writeBufferPos >= (writeBufferSize - 1) ||
+                    (currentBlock == (blocksNumber - 2)))
+                {
+                    outFile.write(writeBuffer.data(), writeBufferPos);
+                    writeBufferPos = 0;
+                }
             }
             else
             {

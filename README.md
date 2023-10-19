@@ -57,17 +57,18 @@ ziso.exe -i <input-file> -o <output-file>
 
 ## Arguments
 
-| Short |      Long     | Value |                      Description                      |
-|:-----:|:-------------:|:-----:|:-----------------------------------------------------:|
-|   -i  | --input       |       | Input file to process                                 |
-|   -o  | --output      |       | Output file                                           |
-|   -c  | --compression |  1-12 | Compression level                                     |
-|   -m  | --mode2-lz4   |       | Use an alternative LZ4 compression method             |
-|   -h  | --lz4hc       |       | Activate the High Compression algorithm               |
-|   -b  | --brute-force |       | Test the two LZ4 compression methods and use the best |
-|   -s  | --block-size  |  2048 | Block size, usually 2048 but better 2352 for CD-ROMS  |
-|   -f  | --force       |       | Force to overwrite the output file                    |
-|   -k  | --keep-output |       | Keep the output file if something fails               |
+| Short |      Long     | Value |                      Description                                 |
+|:-----:|:-------------:|:-----:|:----------------------------------------------------------------:|
+|   -i  | --input       |       | Input file to process                                            |
+|   -o  | --output      |       | Output file                                                      |
+|   -c  | --compression |  1-12 | Compression level                                                |
+|   -m  | --mode2-lz4   |       | Use an alternative LZ4 compression method                        |
+|   -h  | --lz4hc       |       | Activate the High Compression algorithm                          |
+|   -b  | --brute-force |       | Test the two LZ4 compression methods and use the best            |
+|   -s  | --block-size  |  2048 | Block size, usually 2048 but better 2352 for CD-ROMS             |
+|   -z  | --cache-size  |   4   | Cache size in MB to improve the compression/decompression speed  |
+|   -f  | --force       |       | Force to overwrite the output file                               |
+|   -k  | --keep-output |       | Keep the output file if something fails                          |
 
 
 ### Explanation
@@ -95,3 +96,11 @@ The LZ4 library provides an alternative compression method called LZ4HC, which p
 As I have explained above, there are two compression functions in LZ4. This argument will compress every block using both and will write the smaller result to the output file.
 
 LZ4HC will not be tried because it also uses the best compression method, so using the brute-force option with the LZ4HC compression method included will produce the same result as to use directly the lz4hc compression option. That is why is better to directly use that option unless we want to keep the compatibility with the standard LZ4 libraries without HC.
+
+#### Block Size
+
+Size of every compressed block. By default 2048, but it's recommended to change it to 2352 when a CD-ROM is being compressed. A bigger block size improve the compression ratio, but increases the memory required by the decompresor to get the original data. Also the reader must be compatible with the blocksize or will fail.
+
+#### Cache Size
+
+The size of the cache memory used as buffer to improve the compression and decompression speed. It reduces the required read and write IO request improving the compression speed up to 40-50% and the decompression speed up to 70% compared with the ziso.py version. Normally the default size is enought and increasing the size will not improve the speed, but in some cases can be a good option.
