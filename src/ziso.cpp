@@ -225,11 +225,11 @@ int main(int argc, char **argv)
 
         // Read buffer. To make it easier to manage, we will create a buffer with a size of a multiple of the blockSize.
         uint32_t readBufferSize = options.cacheSize - (options.cacheSize % options.blockSize);
-        uint32_t readBufferPos = readBufferSize; // Set the position to the End Of Buffer to force a fill at the first loop.
         if (inputSize < readBufferSize)
         {
             readBufferSize = inputSize - (inputSize % options.blockSize);
         }
+        uint32_t readBufferPos = readBufferSize; // Set the position to the End Of Buffer to force a fill at the first loop.
         std::vector<char> readBuffer(readBufferSize, 0);
         // Write buffer. The output block size is not fixed, so cannot be calculated and we will use the cache size.
         uint32_t writeBufferPos = 0;
@@ -341,6 +341,19 @@ int main(int argc, char **argv)
             goto exit;
         }
 
+        // Read buffer. The input block size is not fixed, so cannot be calculated and we will use the cache size.
+        uint32_t readBufferSize = options.cacheSize;
+        if (inputSize < readBufferSize)
+        {
+            readBufferSize = inputSize;
+        }
+        uint32_t readBufferPos = readBufferSize; // Set the position to the End Of Buffer to force a fill at the first loop.
+        std::vector<char> readBuffer(readBufferSize, 0);
+        // Write buffer. To make it easier to manage, we will create a buffer with a size of a multiple of the blockSize.
+        uint32_t writeBufferSize = options.cacheSize - (options.cacheSize % options.blockSize);
+        uint32_t writeBufferPos = 0;
+        std::vector<char> writeBuffer(writeBufferSize, 0);
+
         // Maybe not all the programs will try the best between compressed and uncompressed data
         // so reserve the double of read buffer space to be able to read >blockSize compressed blocks.
         std::vector<char> blockReadBuffer(fileHeader.blockSize * 2, 0);
@@ -353,6 +366,26 @@ int main(int argc, char **argv)
             uint64_t blockEndPosition = uint64_t(blocks[currentBlock + 1] & 0x7FFFFFFF) << fileHeader.indexShift;
             uint64_t currentBlockSize = blockEndPosition - blockStartPosition;
 
+            uint32_t leftInReadBuffer = readBufferSize - readBufferPos;
+            //  If the current reader position is the end of the buffer, fill the buffer with new data
+            if (currentBlockSize > leftInReadBuffer)
+            {
+                // Get the data left in file
+                uint64_t leftInFile = inputSize - inFile.tellg();
+
+                // To Read
+                uint64_t toRead = readBufferSize - leftInReadBuffer;
+                if (toRead > leftInFile)
+                {
+                    toRead = leftInFile;
+                }
+
+                // Move the data buffer to the start point
+                std::memmove(readBuffer.data(), readBuffer.data() + readBufferPos, leftInReadBuffer);
+                inFile.read(readBuffer.data() + leftInReadBuffer, toRead);
+                readBufferPos = 0;
+            }
+
             // The current block size cannot exceed 2 x blockSize.
             if (currentBlockSize > (fileHeader.blockSize * 2))
             {
@@ -362,11 +395,8 @@ int main(int argc, char **argv)
                 goto exit;
             }
 
-            // Read the block data
-            inFile.read(blockReadBuffer.data(), currentBlockSize);
-
             int decompressedBytes = decompress_block(
-                blockReadBuffer.data(),
+                readBuffer.data() + readBufferPos,
                 currentBlockSize,
                 blockWriteBuffer.data(),
                 blockWriteBuffer.size(),
@@ -374,6 +404,7 @@ int main(int argc, char **argv)
 
             if (decompressedBytes > 0)
             {
+                readBufferPos += currentBlockSize;
                 outFile.write(blockWriteBuffer.data(), decompressedBytes);
             }
             else
