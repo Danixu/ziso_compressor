@@ -14,7 +14,7 @@ This ziso compressor is an alternative to the ziso.py compressor that I have fou
 
 There are some things I'd like to do, like for example:
 
-* ~~Try to add read and write buffers to improve the speed~~ -> 50-55% faster.
+* ~~Try to add read and write buffers to improve the speed~~ -> 50-55% faster compressing and up to 70% decompressing.
 * CD-ROM detection to select the best block size (DVD -> 2048 vs CD-ROM -> 2352)
 * Add Multi Thread processing.
 * Maybe add an extra step to analyze the ISO. The space saving in the best scenario is about 4,5MB, so will be the lower priority.
