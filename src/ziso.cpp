@@ -661,9 +661,11 @@ bool is_cdrom(std::fstream &fIn)
         if (
             std::strncmp(buffer.data(), (char *)cdSync, 12) != 0)
         {
+            fIn.seekg(currentPos);
             return false;
         }
     }
+    fIn.seekg(currentPos);
     return true;
 }
 

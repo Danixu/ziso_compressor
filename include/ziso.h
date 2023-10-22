@@ -2,7 +2,7 @@
  */
 #define TITLE "ziso - ZSO compressor/decompressor"
 #define COPYR "Created by Daniel Carrasco (2023)"
-#define VERSI "0.1.0"
+#define VERSI "0.5.0"
 /*
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
