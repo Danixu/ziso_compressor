@@ -166,12 +166,12 @@ int main(int argc, char **argv)
         fileHeader.blockSize = options.blockSize;
 
         // Set shift depending of the input size. Bigger shift means more waste.
-        if (inputSize > (0x3FFFFFFFF - headerSize))
+        if (inputSize > (uint64_t)(0x3FFFFFFFF - headerSize))
         {
             // Size is bigger than 17.179.869.183 (16GB-32GB). PS2 games are that big.
             fileHeader.indexShift = 4;
         }
-        if (inputSize > (0x1FFFFFFFF - headerSize))
+        if (inputSize > (uint64_t)(0x1FFFFFFFF - headerSize))
         {
             // Size is bigger than 8.589.934.591 (8GB-16GB)
             fileHeader.indexShift = 3;
@@ -196,7 +196,7 @@ int main(int argc, char **argv)
         // Print the sumary
         fprintf(stdout, "%20s %s\n", "Source:", options.inputFile.c_str());
         fprintf(stdout, "%20s %s\n\n", "Destination:", options.outputFile.c_str());
-        fprintf(stdout, "%20s %lu bytes\n", "Total File Size:", inputSize);
+        fprintf(stdout, "%20s %llu bytes\n", "Total File Size:", inputSize);
         fprintf(stdout, "%20s %d\n", "Block Size:", options.blockSize);
         fprintf(stdout, "%20s %d\n", "Index align:", fileHeader.indexShift);
         fprintf(stdout, "%20s %d\n", "Compress Level:", options.compressionLevel);
@@ -336,7 +336,7 @@ int main(int argc, char **argv)
         // Print the sumary
         fprintf(stdout, "%20s %s\n", "Source:", options.inputFile.c_str());
         fprintf(stdout, "%20s %s\n\n", "Destination:", options.outputFile.c_str());
-        fprintf(stdout, "%20s %lu bytes\n", "Total File Size:", fileHeader.uncompressedSize);
+        fprintf(stdout, "%20s %llu bytes\n", "Total File Size:", fileHeader.uncompressedSize);
         fprintf(stdout, "%20s %d\n", "Block Size:", fileHeader.blockSize);
         fprintf(stdout, "%20s %d\n", "Index align:", fileHeader.indexShift);
 
@@ -491,8 +491,6 @@ inline uint32_t compress_block(
 
         std::vector<char> lz4Buffer(dstSize, 0);
         std::vector<char> lz4Method2Buffer(dstSize, 0);
-
-        bool counted = false;
 
         // Compress using the standard methods
         // Method 1
@@ -804,7 +802,7 @@ int get_options(
                 }
                 else if (temp_argument > CACHE_SIZE_MAX)
                 {
-                    fprintf(stderr, "\n\nERROR: the provided cache size is not correct. Must be less than %luMB\n\n", CACHE_SIZE_MAX);
+                    fprintf(stderr, "\n\nERROR: the provided cache size is not correct. Must be less than %uMB\n\n", CACHE_SIZE_MAX);
                     print_help();
                     return 1;
                 }
@@ -887,7 +885,7 @@ static void progress_compress(uint64_t currentInput, uint64_t totalInput, uint64
 
     if (lastProgress != progress)
     {
-        fprintf(stdout, "%050s\r", "");
+        fprintf(stdout, "%50s\r", "");
         fprintf(stdout, "Compressing(%u%%) - Ratio(%u%%)\r", progress, ratio);
         fflush(stdout);
         lastProgress = progress;
@@ -900,7 +898,7 @@ static void progress_decompress(uint64_t currentInput, uint64_t totalInput)
 
     if (lastProgress != progress)
     {
-        fprintf(stdout, "%050s\r", "");
+        fprintf(stdout, "%50s\r", "");
         fprintf(stdout, "Decompressing(%u%%)\r", progress);
         fflush(stdout);
         lastProgress = progress;
@@ -917,17 +915,17 @@ static void show_summary(uint64_t outputSize, opt options)
     fprintf(stdout, "--------------------------------------------------------------\n");
     if (options.bruteForce || (!options.lz4hc && !options.alternativeLz4))
     {
-        fprintf(stdout, "LZ4 ............... %7d ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4Count, MB(summaryData.lz4In), MB(summaryData.lz4Out));
+        fprintf(stdout, "LZ4 ............... %7lld ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4Count, MB(summaryData.lz4In), MB(summaryData.lz4Out));
     }
     if (options.bruteForce || (!options.lz4hc && options.alternativeLz4))
     {
-        fprintf(stdout, "LZ4 M2 ............ %7d ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4m2Count, MB(summaryData.lz4m2In), MB(summaryData.lz4m2Out));
+        fprintf(stdout, "LZ4 M2 ............ %7lld ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4m2Count, MB(summaryData.lz4m2In), MB(summaryData.lz4m2Out));
     }
     if (!options.bruteForce && options.lz4hc)
     {
-        fprintf(stdout, "LZ4HC ............. %7d ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4hcCount, MB(summaryData.lz4hcIn), MB(summaryData.lz4hcOut));
+        fprintf(stdout, "LZ4HC ............. %7lld ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4hcCount, MB(summaryData.lz4hcIn), MB(summaryData.lz4hcOut));
     }
-    fprintf(stdout, "RAW ............... %7d ...... %7.2fMB ...... %7.2fMB\n", summaryData.rawCount, MB(summaryData.raw), MB(summaryData.raw));
+    fprintf(stdout, "RAW ............... %7lld ...... %7.2fMB ...... %7.2fMB\n", summaryData.rawCount, MB(summaryData.raw), MB(summaryData.raw));
     fprintf(stdout, "--------------------------------------------------------------\n");
     fprintf(stdout, "Total ............. %7d ...... %7.2fMb ...... %7.2fMb\n", total_sectors, MB(summaryData.sourceSize), MB(outputSize));
     fprintf(stdout, "ZSO reduction (input vs ZSO) ...................... %3.2f%%\n", (1.0 - (outputSize / (float)summaryData.sourceSize)) * 100);
