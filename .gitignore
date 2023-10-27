@@ -36,6 +36,22 @@ release/
 *.txt
 test*
 
+# Cmake files (includes CMakeLists.txt because was ignored above)
+!**/CMakeLists.txt
+!CMakeLists.txt
+**/cmake-build-debug
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/install_manifest.txt
+**/CMakeFiles/
+**/CTestTestfile.cmake
+**/Makefile
+**/*.cbp
+**/CMakeScripts/
+**/compile_commands.json
+build/
+**/DartConfiguration.tcl
+
 # Google Docs files
 **.gsheet
 
