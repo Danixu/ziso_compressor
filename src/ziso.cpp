@@ -886,7 +886,7 @@ void print_help()
             "    -r/--replace\n"
             "           Force to ovewrite the output file\n"
             "    -h/--hdl-fix\n"
-            "           Add a padding in the output file to the nearest 2048 bytes multiple (hdl_dump bug fix).\n"
+            "           Add a padding in the output file to the nearest upper 2048 bytes multiple (hdl_dump bug fix).\n"
             "\n",
             exeName.c_str(), exeName.c_str(), exeName.c_str(), exeName.c_str(), CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT);
 }

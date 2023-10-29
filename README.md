@@ -113,4 +113,4 @@ The size of the cache memory used as buffer to improve the compression and decom
 
 #### HDL Fix
 
-Actually there is a [bug in the hdl_dump](https://github.com/ps2homebrew/hdl-dump/issues/71) which will trim the latest bytes of the file if the size is not a multiple of 2048. To solve it, the program will pad the output file to the nearest 2048 bytes multiple.
+Actually there is a [bug in the hdl_dump](https://github.com/ps2homebrew/hdl-dump/issues/71) which will trim the latest bytes of the file if the size is not a multiple of 2048. To solve it, the program will pad the output file to the nearest upper 2048 bytes multiple.
