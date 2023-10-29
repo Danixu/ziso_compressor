@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.14)
 # Project name and a few useful settings. Other commands can pick up the results
 project(
   Ziso
-  VERSION 0.5
+  VERSION 0.5.1
   DESCRIPTION "Another Ziso compressor with advanced features"
   LANGUAGES C CXX)
 

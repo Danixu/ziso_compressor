@@ -5,14 +5,14 @@
 static struct option long_options[] = {
     {"input", required_argument, NULL, 'i'},
     {"output", required_argument, NULL, 'o'},
-    {"compression", required_argument, NULL, 'c'},
+    {"compression-level", required_argument, NULL, 'c'},
     {"mode2-lz4", no_argument, NULL, 'm'},
-    {"lz4hc", no_argument, NULL, 'h'},
-    {"brute-force", no_argument, NULL, 'b'},
-    {"block-size", required_argument, NULL, 's'},
+    {"lz4hc", no_argument, NULL, 'l'},
+    {"brute-force", no_argument, NULL, 'f'},
+    {"block-size", required_argument, NULL, 'b'},
     {"cache-size", required_argument, NULL, 'z'},
-    {"force", no_argument, NULL, 'f'},
-    {"keep-output", no_argument, NULL, 'k'},
+    {"replace", no_argument, NULL, 'r'},
+    {"hdl-fix", no_argument, NULL, 'h'},
     {NULL, 0, NULL, 0}};
 
 // global variales
@@ -121,7 +121,7 @@ int main(int argc, char **argv)
         outFile.open(options.outputFile.c_str(), std::ios::in | std::ios::binary);
         if (outFile.read(&dummy, 0))
         {
-            fprintf(stderr, "\nERROR: Cowardly refusing to replace output file. Use the -f/--force-rewrite options to force it.\n\n");
+            fprintf(stderr, "\nERROR: Cowardly refusing to replace the output file. Use the -r/--replace options to force it.\n\n");
             options.keepOutput = true;
             return_code = 1;
             goto exit;
@@ -153,7 +153,7 @@ int main(int argc, char **argv)
 
         if (!options.blockSizeFixed)
         {
-            if (is_cdrom(inFile))
+            if (is_cdrom(inFile) && options.blockSize != 2352)
             {
                 fprintf(stderr, "\nWARNING: CD-ROM detected... Changing the block size to 2352.\n");
                 fprintf(stderr, "If you want to keep the original block size please use the '--block-size 2048' option.\n\n");
@@ -309,6 +309,13 @@ int main(int argc, char **argv)
         uint64_t blockEndPosition = outFile.tellp();
         blocks[blocksNumber - 1] = (blockEndPosition >> fileHeader.indexShift);
 
+        // The HDL_dump bug trims the data at the end of the file if doesn't fit into a 2048 multiple.
+        // This fix will pad the output file to the nearest 2048 bytes multiple.
+        if (options.hdlFix)
+        {
+            file_align(outFile, 11);
+        }
+
         // Write the blocks index
         outFile.seekp(0x18);
         outFile.write((const char *)blocks.data(), blocksNumber * sizeof(uint32_t));
@@ -342,8 +349,14 @@ int main(int argc, char **argv)
 
         // Check if the input file is damaged
         uint64_t headerFileSize = uint64_t(blocks[blocksNumber - 1] & 0x7FFFFFFF) << fileHeader.indexShift;
+        // Check if the file was fixed against the hdl_dump bug
+        uint64_t hdlFixHeaderFileSize = headerFileSize;
+        if (headerFileSize % 2048)
+        {
+            hdlFixHeaderFileSize = ((headerFileSize >> 11) + 1) << 11;
+        }
 
-        if (headerFileSize != inputSize)
+        if (headerFileSize != inputSize && hdlFixHeaderFileSize != inputSize)
         {
             // The input file doesn't matches the index data and maybe is damaged
             fprintf(stderr, "\n\nERROR: The input file header is corrupt. Filesize doesn't matches.\n\n");
@@ -703,7 +716,7 @@ int get_options(
 
     std::string optarg_s;
 
-    while ((ch = getopt_long(argc, argv, "i:o:c:mhbs:z:fk", long_options, NULL)) != -1)
+    while ((ch = getopt_long(argc, argv, "i:o:c:mlfb:z:rh", long_options, NULL)) != -1)
     {
         // check to see if a single character or long option came through
         switch (ch)
@@ -718,7 +731,7 @@ int get_options(
             options.outputFile = optarg;
             break;
 
-        // short option '-c', long option "--compression"
+        // short option '-c', long option "--compression-level"
         // Compression level
         case 'c':
             try
@@ -745,23 +758,23 @@ int get_options(
             }
             break;
 
-        // short option '-m', long option "--method2-lz4"
+        // short option '-m', long option "--mode2-lz4"
         case 'm':
             options.alternativeLz4 = true;
             break;
 
-        // short option '-h', long option "--lz4hc"
-        case 'h':
+        // short option '-l', long option "--lz4hc"
+        case 'l':
             options.lz4hc = true;
             break;
 
-        // short option '-b', long option "--brute-force"
-        case 'b':
+        // short option '-f', long option "--brute-force"
+        case 'f':
             options.bruteForce = true;
             break;
 
-        // short option '-s', long option "--block-size"
-        case 's':
+        // short option '-b', long option "--block-size"
+        case 'b':
             try
             {
                 optarg_s = optarg;
@@ -825,14 +838,14 @@ int get_options(
             }
             break;
 
-        // short option '-f', long option "--force"
-        case 'f':
+        // short option '-r', long option "--replace"
+        case 'r':
             options.overwrite = true;
             break;
 
-        // short option '-k', long option "--keep-output"
-        case 'k':
-            options.keepOutput = true;
+        // short option '-h', long option "--hdl-fix"
+        case 'h':
+            options.hdlFix = true;
             break;
 
         case '?':
@@ -857,23 +870,23 @@ void print_help()
             "    %s -i/--input example.zso\n"
             "    %s -i/--input example.zso -o/--output example.iso\n"
             "Optional options:\n"
-            "    -c/--compression 1-12\n"
+            "    -c/--compression-level 1-12\n"
             "           Compression level to be used. By default 12.\n"
             "    -m/--mode2-lz4\n"
             "           Uses an alternative compression method which will reduce the size in some cases.\n"
-            "    -h/--lz4hc\n"
+            "    -l/--lz4hc\n"
             "           Uses the LZ4 high compression algorithm to improve the compression ratio.\n"
             "           NOTE: This will create a non standar ZSO and maybe the decompressor will not be compatible.\n"
-            "    -b/--brute-force\n"
+            "    -f/--brute-force\n"
             "           SLOW: Try to compress using the two LZ4 methods. LZ4HC already selects the best compression method.\n"
-            "    -s/--block-size <size>\n"
+            "    -b/--block-size <size>\n"
             "           The size in bytes of the blocks. By default 2048.\n"
             "    -z/--cache-size <size>\n"
             "           The size of the cache buffer in MB. By default %d. Memory usage will be the double (%dMB Read + %dMB Write).\n"
-            "    -f/--force\n"
+            "    -r/--replace\n"
             "           Force to ovewrite the output file\n"
-            "    -k/--keep-output\n"
-            "           Keep the output when something went wrong, otherwise will be removed on error.\n"
+            "    -h/--hdl-fix\n"
+            "           Add a padding in the output file to the nearest 2048 bytes multiple (hdl_dump bug fix).\n"
             "\n",
             exeName.c_str(), exeName.c_str(), exeName.c_str(), exeName.c_str(), CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT);
 }

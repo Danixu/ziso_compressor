@@ -69,12 +69,12 @@ ziso.exe -i <input-file> -o <output-file>
 |   -o  | --output      |       | Output file                                                      |
 |   -c  | --compression |  1-12 | Compression level                                                |
 |   -m  | --mode2-lz4   |       | Use an alternative LZ4 compression method                        |
-|   -h  | --lz4hc       |       | Activate the High Compression algorithm                          |
-|   -b  | --brute-force |       | Test the two LZ4 compression methods and use the best            |
-|   -s  | --block-size  |  2048 | Block size, usually 2048 but better 2352 for CD-ROMS             |
+|   -l  | --lz4hc       |       | Activate the High Compression algorithm                          |
+|   -f  | --brute-force |       | Test the two LZ4 compression methods and use the best            |
+|   -b  | --block-size  |  2048 | Block size, usually 2048 but better 2352 for CD-ROMS             |
 |   -z  | --cache-size  |   4   | Cache size in MB to improve the compression/decompression speed  |
-|   -f  | --force       |       | Force to overwrite the output file                               |
-|   -k  | --keep-output |       | Keep the output file if something fails                          |
+|   -r  | --replace     |       | Force to overwrite the output file                               |
+|   -h  | --hdl-fix     |       | hdl_dump fix when copied to internal PS2 HDD                     |
 
 
 ### Explanation
@@ -110,3 +110,7 @@ Size of every compressed block. By default 2048, but it's recommended to change 
 #### Cache Size
 
 The size of the cache memory used as buffer to improve the compression and decompression speed. It reduces the required read and write IO request improving the compression speed up to 40-50% and the decompression speed up to 70% compared with the ziso.py version. Normally the default size is enought and increasing the size will not improve the speed, but in some cases can be a good option.
+
+#### HDL Fix
+
+Actually there is a [bug in the hdl_dump](https://github.com/ps2homebrew/hdl-dump/issues/71) which will trim the latest bytes of the file if the size is not a multiple of 2048. To solve it, the program will pad the output file to the nearest 2048 bytes multiple.

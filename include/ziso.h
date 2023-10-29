@@ -1,7 +1,6 @@
 #define TITLE "ziso - ZSO compressor/decompressor"
 #define COPYR "Created by Daniel Carrasco (2023)"
-#define VERSI "0.5.0"
- 
+#define VERSI "0.5.1"
 
 #include "banner.h"
 #include <chrono>
@@ -65,6 +64,7 @@ struct opt
     bool bruteForce = false;
     bool lz4hc = false;
     bool overwrite = false;
+    bool hdlFix = false;
     bool keepOutput = false;
 } opt_struct;
 

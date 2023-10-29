@@ -1,1 +1,0 @@
-g++ -I../include ../lib/lz4/lib/lz4.c ../lib/lz4/lib/lz4hc.c ziso.cpp -O3
