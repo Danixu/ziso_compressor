@@ -17,6 +17,7 @@ There are some things I'd like to do, like for example:
 
 * ~~Try to add read and write buffers to improve the speed~~ -> 50-55% faster compressing and up to 70% decompressing.
 * ~~CD-ROM detection to select the best block size (DVD -> 2048 vs CD-ROM -> 2352)~~ -> Done. Now the program detects CDROM images.
+* Add alternative compressor libraries like [smalLZ4](https://github.com/stbrumme/smallz4) and [lz4ultra](https://github.com/emmanuel-marty/lz4ultra). They are supposed to get better compression ratio.
 * Add Multi Thread processing.
 * Maybe add an extra step to analyze the ISO. The space saving in the best scenario is about 4,5MB, so will be the lower priority.
 
@@ -35,14 +36,18 @@ cd ziso_compressor
 git submodules update --init
 ```
 
-Compile the library:
+Compile the program:
+
+This repository includes the cmake configuration, so to compile you will have to run the standard commands:
 
 ```
-cd src
-g++ -I../include ../lib/lz4/lib/lz4.c ../lib/lz4/lib/lz4hc.c ziso.cpp -O3 -o <ziso or ziso.exe>
+$ cmake -B .
+$ make
 ```
 
-Tested in Manjaro and Windows 11 with MSYS2 with MinGW64.
+This will create the binary files into the bin directory.
+
+Tested in Manjaro with the standard build tools, and Windows 11 with MSYS2 with MinGW64.
 
 ## Usage
 
