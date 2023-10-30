@@ -1,0 +1,36 @@
+name: C/C++ CI
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Packages
+        run: sudo apt-get update && sudo apt-get install -y mingw-w64 zip cmake
+      - name: Initializing submodules
+        run: git submodule update --init
+      - name: Build linux release
+        run: cmake -B . && make
+      - name: Build windows release
+        run: cmake -DCMAKE_TOOLCHAIN_FILE="tc-win64.cmake" -B . && make
+      - name: Set env
+        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+      - name: Generate release
+        run: |
+          cd release
+          zip ziso_${{ env.RELEASE_VERSION }}_linux.zip bin/ziso
+          zip ziso_${{ env.RELEASE_VERSION }}_win64.zip bin/ziso.exe
+
+      - name: Upload assets
+        uses: marvinpinto/action-automatic-releases@v1.2.1
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
+          files: |
+            release/*.zip
