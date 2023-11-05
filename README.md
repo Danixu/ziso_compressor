@@ -62,31 +62,31 @@ ziso.exe -i <input-file> -o <output-file>
 
 ## Arguments
 
-| Short |      Long     | Value |                      Description                                 |
-|:-----:|:-------------:|:-----:|:----------------------------------------------------------------:|
-|   -i  | --input       |       | Input file to process                                            |
-|   -o  | --output      |       | Output file                                                      |
-|   -c  | --compression |  1-12 | Compression level                                                |
-|   -m  | --mode2-lz4   |       | Use an alternative LZ4 compression method                        |
-|   -l  | --lz4hc       |       | Activate the High Compression algorithm                          |
-|   -f  | --brute-force |       | Test the two LZ4 compression methods and use the best            |
-|   -b  | --block-size  |  2048 | Block size, usually 2048 but better 2352 for CD-ROMS             |
-|   -z  | --cache-size  |   4   | Cache size in MB to improve the compression/decompression speed  |
-|   -r  | --replace     |       | Force to overwrite the output file                               |
-|   -h  | --hdl-fix     |       | hdl_dump fix when copied to internal PS2 HDD                     |
+| Short |      Long     | Value |                      Description                                    |
+|:-----:|:-------------:|:-----:|:-------------------------------------------------------------------:|
+|   -i  | --input       |       | Input file to process                                               |
+|   -o  | --output      |       | Output file                                                         |
+|   -c  | --compression |   12  | Compression level                                                   |
+|   -m  | --mode2-lz4   |       | Use an alternative LZ4 compression method                           |
+|   -l  | --lz4hc       |       | Activate the High Compression algorithm                             |
+|   -f  | --brute-force |       | Test the two LZ4 compression methods and use the best               |
+|   -b  | --block-size  |  2048 | Block size, usually 2048 but is beter to set it to 2352 for CD-ROMS |
+|   -z  | --cache-size  |   4   | Cache size in MB to improve the compression/decompression speed     |
+|   -r  | --replace     |       | Force to overwrite the output file                                  |
+|   -h  | --hdl-fix     |       | hdl_dump fix to avoid corruption when copied to internal PS2 HDD    |
 
 
 ### Explanation
 
 #### Compression
 
-The LZ4 method doesn't have compression level arguments. Instead, it has **acceleration** which will affects the speed and compression ratio (just like the compression arguments). On my program I use the **acceleration** to supply the compression level.
+The standard LZ4 method doesn't have compression level arguments. Instead, it has **acceleration** which will affects the speed and compression ratio (just like the compression arguments). On my program I use the **acceleration** to supply the compression level.
 
 The LZ4HC method already includes the compression option, so it will passed to it directly.
 
 #### Alternative LZ4 compression method
 
-The LZ4 library has two ways to compress the data. One is intended to be used to compress the data at once, and the other to compress several blocks of data keeping the dictionary to improve the compression ratio.
+The standard LZ4 library has two ways to compress the data. One is intended to be used to compress the data at once, and the other to compress several blocks of data keeping the dictionary to improve the compression ratio.
 
 In this case both are used in the same way: compress all the data at once, but for any reason there are some differences between both even when they uses the same algorithm. Sometimes the first method compress better and sometimes the 2nd. That is why I provide the "alternative" method to be used when it compress a bit better.
 
@@ -98,13 +98,15 @@ The LZ4 library provides an alternative compression method called LZ4HC, which p
 
 #### Brute Force Search
 
-As I have explained above, there are two compression functions in LZ4. This argument will compress every block using both and will write the smaller result to the output file.
+As I have explained above, there are two compression functions in the standard LZ4 library. This argument will compress every block using both and will write the smaller result to the output file.
 
-LZ4HC will not be tried because it also uses the best compression method, so using the brute-force option with the LZ4HC compression method included will produce the same result as to use directly the lz4hc compression option. That is why is better to directly use that option unless we want to keep the compatibility with the standard LZ4 libraries without HC.
+LZ4HC will not be tried because it also uses the best compression method, so using the brute-force option with the LZ4HC compression method included will produce the same result as to use directly the LZ4HC compression option. It is better to directly use that option unless we want to keep the compatibility with old LZ4 libraries without HC.
 
 #### Block Size
 
 Size of every compressed block. By default 2048, but it's recommended to change it to 2352 when a CD-ROM is being compressed. A bigger block size improve the compression ratio, but increases the memory required by the decompresor to get the original data. Also the reader must be compatible with the blocksize or will fail.
+
+The program is able to detect the CD-ROM images, so it will change the block size to 2352 automatically when detected.
 
 #### Cache Size
 
