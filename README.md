@@ -17,7 +17,6 @@ There are some things I'd like to do, like for example:
 
 * ~~Try to add read and write buffers to improve the speed~~ -> 50-55% faster compressing and up to 70% decompressing.
 * ~~CD-ROM detection to select the best block size (DVD -> 2048 vs CD-ROM -> 2352)~~ -> Done. Now the program detects CDROM images.
-* Add alternative compressor libraries like [smalLZ4](https://github.com/stbrumme/smallz4) and ~~[lz4ultra](https://github.com/emmanuel-marty/lz4ultra)~~. They are supposed to get better compression ratio. -> Lz4Ultra gets worst ratio with much more compression time than LZ4HC.
 * Add Multi Thread processing.
 
 ## Compile

@@ -502,8 +502,8 @@ inline uint32_t compress_block(
         uint32_t lz4Size = 0;
         uint32_t lz4Method2Size = 0;
 
-        std::vector<char> lz4Buffer(dstSize, 0);
-        std::vector<char> lz4Method2Buffer(dstSize, 0);
+        std::vector<char> lz4Buffer(LZ4_compressBound(dstSize), 0);
+        std::vector<char> lz4Method2Buffer(LZ4_compressBound(dstSize), 0);
 
         // Compress using the standard methods
         // Method 1
