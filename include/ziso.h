@@ -1,6 +1,6 @@
 #define TITLE "ziso - ZSO compressor/decompressor"
 #define COPYR "Created by Daniel Carrasco (2023)"
-#define VERSI "0.5.1"
+#define VERSI "0.5.2"
 
 #include "banner.h"
 #include <chrono>
@@ -12,6 +12,8 @@
 #include <filesystem>
 #include <cmath>
 #include <vector>
+
+#include "spdlog/spdlog.h"
 
 // The LZ4_ACCELERATION_MAX is defined in the lz4.c file and is about 65537 (now).
 // Testing I have noticed that above 1024 the compression was almost the same, so I'll set the max there.
@@ -65,6 +67,8 @@ struct opt
     bool lz4hc = false;
     bool overwrite = false;
     bool hdlFix = false;
+    std::string logFile = "";
+    spdlog::level::level_enum logLevel = spdlog::level::err;
     bool keepOutput = false;
 } opt_struct;
 

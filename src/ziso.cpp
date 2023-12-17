@@ -1,18 +1,27 @@
 #include "ziso.h"
-#include "../lib/lz4/lib/lz4.h"
-#include "../lib/lz4/lib/lz4hc.h"
+#include "lz4.h"
+#include "lz4hc.h"
+#include "spdlog/sinks/basic_file_sink.h"
 
+// Arguments list
+const char *const short_options = "i:o:c:b:fh";
 static struct option long_options[] = {
+    // Long and short options
     {"input", required_argument, NULL, 'i'},
     {"output", required_argument, NULL, 'o'},
     {"compression-level", required_argument, NULL, 'c'},
-    {"mode2-lz4", no_argument, NULL, 'm'},
-    {"lz4hc", no_argument, NULL, 'l'},
-    {"brute-force", no_argument, NULL, 'f'},
     {"block-size", required_argument, NULL, 'b'},
-    {"cache-size", required_argument, NULL, 'z'},
-    {"replace", no_argument, NULL, 'r'},
-    {"hdl-fix", no_argument, NULL, 'h'},
+    {"replace", no_argument, NULL, 'f'},
+    {"help", no_argument, NULL, 'h'},
+
+    // Long only options
+    {"mode2-lz4", no_argument, NULL, 10},
+    {"lz4hc", no_argument, NULL, 11},
+    {"brute-force", no_argument, NULL, 12},
+    {"cache-size", required_argument, NULL, 13},
+    {"hdl-fix", no_argument, NULL, 14},
+    {"log-file", required_argument, NULL, 15},
+    {"log-level", required_argument, NULL, 16},
     {NULL, 0, NULL, 0}};
 
 // global variales
@@ -53,6 +62,8 @@ int main(int argc, char **argv)
     {
         goto exit;
     }
+
+    spdlog::debug("Testing how it works");
 
     if (options.inputFile.empty())
     {
@@ -714,9 +725,12 @@ int get_options(
     // temporal variables for options parsing
     uint64_t temp_argument = 0;
 
+    // Logger
+    std::shared_ptr<spdlog::logger> logger = nullptr;
+
     std::string optarg_s;
 
-    while ((ch = getopt_long(argc, argv, "i:o:c:mlfb:z:rh", long_options, NULL)) != -1)
+    while ((ch = getopt_long(argc, argv, short_options, long_options, NULL)) != -1)
     {
         // check to see if a single character or long option came through
         switch (ch)
@@ -758,21 +772,6 @@ int get_options(
             }
             break;
 
-        // short option '-m', long option "--mode2-lz4"
-        case 'm':
-            options.alternativeLz4 = true;
-            break;
-
-        // short option '-l', long option "--lz4hc"
-        case 'l':
-            options.lz4hc = true;
-            break;
-
-        // short option '-f', long option "--brute-force"
-        case 'f':
-            options.bruteForce = true;
-            break;
-
         // short option '-b', long option "--block-size"
         case 'b':
             try
@@ -800,8 +799,28 @@ int get_options(
             }
             break;
 
-        // short option '-z', long option "--cache-size"
-        case 'z':
+        // short option '-f', long option "--replace"
+        case 'r':
+            options.overwrite = true;
+            break;
+
+        // long option "--mode2-lz4"
+        case 10:
+            options.alternativeLz4 = true;
+            break;
+
+        // long option "--lz4hc"
+        case 11:
+            options.lz4hc = true;
+            break;
+
+        // long option "--brute-force"
+        case 12:
+            options.bruteForce = true;
+            break;
+
+        // long option "--cache-size"
+        case 13:
             try
             {
                 optarg_s = optarg;
@@ -838,16 +857,54 @@ int get_options(
             }
             break;
 
-        // short option '-r', long option "--replace"
-        case 'r':
-            options.overwrite = true;
-            break;
-
-        // short option '-h', long option "--hdl-fix"
-        case 'h':
+        // long option "--hdl-fix"
+        case 14:
             options.hdlFix = true;
             break;
 
+        // long option '--log-file'
+        case 15:
+            options.logFile = optarg;
+            logger = spdlog::basic_logger_mt("ziso", options.logFile);
+            // logger->set_level(spdlog::level::trace);
+            spdlog::set_default_logger(logger);
+            break;
+
+        // long option '--log-level'
+        case 16:
+            if (strcmp(optarg, "trace") == 0)
+            {
+                options.logLevel = spdlog::level::trace;
+            }
+            else if (strcmp(optarg, "debug") == 0)
+            {
+                options.logLevel = spdlog::level::debug;
+            }
+            else if (strcmp(optarg, "info") == 0)
+            {
+                options.logLevel = spdlog::level::info;
+            }
+            else if (strcmp(optarg, "warn") == 0)
+            {
+                options.logLevel = spdlog::level::warn;
+            }
+            else if (strcmp(optarg, "err") == 0)
+            {
+                options.logLevel = spdlog::level::err;
+            }
+            else if (strcmp(optarg, "critical") == 0)
+            {
+                options.logLevel = spdlog::level::critical;
+            }
+            else if (strcmp(optarg, "off") == 0)
+            {
+                options.logLevel = spdlog::level::off;
+            }
+
+            spdlog::set_level(options.logLevel);
+            break;
+
+        case 'h':
         case '?':
             print_help();
             return 1;
@@ -872,21 +929,25 @@ void print_help()
             "Optional options:\n"
             "    -c/--compression-level 1-12\n"
             "           Compression level to be used. By default 12.\n"
-            "    -m/--mode2-lz4\n"
-            "           Uses an alternative compression method which will reduce the size in some cases.\n"
-            "    -l/--lz4hc\n"
-            "           Uses the LZ4 high compression algorithm to improve the compression ratio.\n"
-            "           NOTE: This will create a non standar ZSO and maybe the decompressor will not be compatible.\n"
-            "    -f/--brute-force\n"
-            "           SLOW: Try to compress using the two LZ4 methods. LZ4HC already selects the best compression method.\n"
             "    -b/--block-size <size>\n"
             "           The size in bytes of the blocks. By default 2048.\n"
-            "    -z/--cache-size <size>\n"
-            "           The size of the cache buffer in MB. By default %d. Memory usage will be the double (%dMB Read + %dMB Write).\n"
             "    -r/--replace\n"
             "           Force to ovewrite the output file\n"
-            "    -h/--hdl-fix\n"
+            "    --mode2-lz4\n"
+            "           Uses an alternative compression method which will reduce the size in some cases.\n"
+            "    --lz4hc\n"
+            "           Uses the LZ4 high compression algorithm to improve the compression ratio.\n"
+            "           NOTE: This will create a non standar ZSO and maybe the decompressor will not be compatible.\n"
+            "    --brute-force\n"
+            "           SLOW: Try to compress using the two LZ4 methods. LZ4HC already selects the best compression method.\n"
+            "    --cache-size <size>\n"
+            "           The size of the cache buffer in MB. By default %d. Memory usage will be the double (%dMB Read + %dMB Write).\n"
+            "    --hdl-fix\n"
             "           Add a padding in the output file to the nearest upper 2048 bytes multiple (hdl_dump bug fix).\n"
+            "    --log-file\n"
+            "           Set the output log to a file.\n"
+            "    --log-level\n"
+            "           Set the log level.\n"
             "\n",
             exeName.c_str(), exeName.c_str(), exeName.c_str(), exeName.c_str(), CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT);
 }
