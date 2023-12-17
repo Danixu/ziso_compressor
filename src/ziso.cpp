@@ -146,7 +146,7 @@ int main(int argc, char **argv)
 
     if (options.inputFile == options.outputFile)
     {
-        spdlog::error("The input and output is the same file. Check the arguments and that the input file extension is correct.");
+        spdlog::error("The input and output is the same file. Check the arguments and the input file extension.");
         return_code = 1;
         goto exit;
 
@@ -179,13 +179,17 @@ int main(int argc, char **argv)
 
     if (options.compress)
     {
+        spdlog::info("Compressing the input file.");
         // Get the input size
         inFile.seekg(0, std::ios_base::end);
         inputSize = inFile.tellg();
         inFile.seekg(0, std::ios_base::beg);
+        spdlog::debug("The input file size is {} bytes.", inputSize);
 
         // Get the total blocks
         blocksNumber = ceil((float)inputSize / options.blockSize) + 1;
+        spdlog::debug("Number of blocks in file: {}.", blocksNumber - 1);
+        spdlog::debug("Last block size: {}. (0 means 'BlockSize')", inputSize % options.blockSize);
         // Calculate the header size
         headerSize = 0x18 + (blocksNumber * sizeof(uint32_t));
 
@@ -264,36 +268,47 @@ int main(int argc, char **argv)
             spdlog::info("{:<20s} No", "LZ4 HC Compression:");
         }
 
+        spdlog::debug("Writing the file header.");
         outFile.write(reinterpret_cast<const char *>(&fileHeader), sizeof(fileHeader));
 
         // Reserve the blocks index space
+        spdlog::debug("Reserving the blocks index.");
         blocks.resize(blocksNumber, 0);
 
+        spdlog::debug("Writing the blocks index into the output file.");
         outFile.write((const char *)blocks.data(), blocksNumber * sizeof(uint32_t));
 
         // Read buffer. To make it easier to manage, we will create a buffer with a size of a multiple of the blockSize.
         uint32_t readBufferSize = options.cacheSize - (options.cacheSize % options.blockSize);
+        spdlog::debug("The read buffer size will be {}.", readBufferSize);
         if (inputSize < readBufferSize)
         {
             readBufferSize = inputSize - (inputSize % options.blockSize);
+            spdlog::debug("The input file is smaller than the buffer, so buffer will be adjusted to {} bytes.", readBufferSize);
         }
         uint32_t readBufferPos = readBufferSize; // Set the position to the End Of Buffer to force a fill at the first loop.
+        spdlog::debug("Reserving the read buffer space.");
         std::vector<char> readBuffer(readBufferSize, 0);
         // Write buffer. The output block size is not fixed, so cannot be calculated and we will use the cache size.
         uint32_t writeBufferPos = 0;
+        spdlog::debug("Reserving the write buffer space.");
         std::vector<char> writeBuffer(options.cacheSize, 0);
 
         for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
         {
+            spdlog::trace("Compressing the block {}.", currentBlock + 1);
             // If the current reader position is the end of the buffer, fill the buffer with new data
             if (readBufferPos >= (readBufferSize - 1))
             {
+                spdlog::trace("The read buffer is empty. Filling it with the input file data.");
                 inFile.read(readBuffer.data(), readBufferSize);
                 readBufferPos = 0;
             }
             // Fill the output with zeroes until a valid start point depending of index shift
+            spdlog::trace("Aligning the output buffer to the nearest shifted position.");
             uint16_t alignment = buffer_align(writeBuffer.data() + writeBufferPos, (uint64_t)outFile.tellp() + writeBufferPos, fileHeader.indexShift);
             writeBufferPos += alignment;
+            spdlog::trace("The new aligned position is {}.", (uint64_t)outFile.tellp() + writeBufferPos);
             // file_align(outFile, fileHeader.indexShift);
 
             // Capture the block position
@@ -301,10 +316,19 @@ int main(int argc, char **argv)
 
             uint64_t toRead = options.blockSize;
             uint64_t leftInFile = inputSize - ((uint64_t)inFile.tellg() - ((readBufferSize - 1) - readBufferPos));
+            spdlog::trace(
+                "Input Size: {} - Input Position: {} - Read Buffer Size: {} - Read Buffer Position: {} - LeftInFile: {}",
+                inputSize,
+                (uint64_t)inFile.tellg(),
+                readBufferSize,
+                readBufferPos,
+                leftInFile
+            );
             if (leftInFile < toRead)
             {
                 toRead = leftInFile;
             }
+            spdlog::trace("To Read: {}", toRead);
 
             bool uncompressed = false;
             int compressedBytes = compress_block(
@@ -363,10 +387,12 @@ int main(int argc, char **argv)
     }
     else
     {
+        spdlog::info("Decompressing the input file.");
         // Get the input size
         inFile.seekg(0, std::ios_base::end);
         inputSize = inFile.tellg();
         inFile.seekg(0, std::ios_base::beg);
+        spdlog::debug("The input file size is {} bytes.", inputSize);
 
         // Read the header
         inFile.read(reinterpret_cast<char *>(&fileHeader), sizeof(fileHeader));
