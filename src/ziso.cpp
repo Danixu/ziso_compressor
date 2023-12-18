@@ -4,14 +4,14 @@
 #include "spdlog/sinks/basic_file_sink.h"
 
 // Arguments list
-const char *const short_options = "i:o:c:b:fh";
+const char *const short_options = "i:o:c:b:rh";
 static struct option long_options[] = {
     // Long and short options
     {"input", required_argument, NULL, 'i'},
     {"output", required_argument, NULL, 'o'},
     {"compression-level", required_argument, NULL, 'c'},
     {"block-size", required_argument, NULL, 'b'},
-    {"replace", no_argument, NULL, 'f'},
+    {"replace", no_argument, NULL, 'r'},
     {"help", no_argument, NULL, 'h'},
 
     // Long only options
@@ -22,6 +22,7 @@ static struct option long_options[] = {
     {"hdl-fix", no_argument, NULL, 14},
     {"log-file", required_argument, NULL, 15},
     {"log-level", required_argument, NULL, 16},
+    {"ignore-header-size", no_argument, NULL, 17},
     {NULL, 0, NULL, 0}};
 
 // global variales
@@ -62,23 +63,6 @@ int main(int argc, char **argv)
     {
         goto exit;
     }
-
-    // Print the selected options in debug mode:
-    spdlog::debug("Option inputFile: {}", options.inputFile);
-    spdlog::debug("Option outputFile: {}", options.outputFile);
-    spdlog::debug("Option compress: {}", options.compress);
-    spdlog::debug("Option blockSizeFixed: {:<30s}", options.blockSizeFixed);
-    spdlog::debug("Option blockSize: {}", options.blockSize);
-    spdlog::debug("Option cacheSize: {}", options.cacheSize);
-    spdlog::debug("Option compressionLevel: {}", options.compressionLevel);
-    spdlog::debug("Option alternativeLz4: {}", options.alternativeLz4);
-    spdlog::debug("Option bruteForce: {}", options.bruteForce);
-    spdlog::debug("Option lz4hc: {}", options.lz4hc);
-    spdlog::debug("Option overwrite: {}", options.overwrite);
-    spdlog::debug("Option hdlFix: {}", options.hdlFix);
-    spdlog::debug("Option logFile: {}", options.logFile);
-    spdlog::debug("Option logLevel: {}", (int)options.logLevel);
-    spdlog::debug("Option keepOutput: {}", options.keepOutput);
 
     spdlog::debug("Checking the input file.");
 
@@ -149,7 +133,6 @@ int main(int argc, char **argv)
         spdlog::error("The input and output is the same file. Check the arguments and the input file extension.");
         return_code = 1;
         goto exit;
-
     }
 
     // Check if output file exists only if force_rewrite is false
@@ -177,6 +160,16 @@ int main(int argc, char **argv)
         goto exit;
     }
 
+    // Print the selected options in debug mode:
+    spdlog::debug("Option inputFile: {}", options.inputFile);
+    spdlog::debug("Option outputFile: {}", options.outputFile);
+    spdlog::debug("Option compress: {}", options.compress);
+    spdlog::debug("Option cacheSize: {}", options.cacheSize);
+    spdlog::debug("Option overwrite: {}", options.overwrite);
+    spdlog::debug("Option logFile: {}", options.logFile);
+    spdlog::debug("Option logLevel: {}", (int)options.logLevel);
+    spdlog::debug("Option keepOutput: {}", options.keepOutput);
+
     if (options.compress)
     {
         spdlog::info("Compressing the input file.");
@@ -185,13 +178,6 @@ int main(int argc, char **argv)
         inputSize = inFile.tellg();
         inFile.seekg(0, std::ios_base::beg);
         spdlog::debug("The input file size is {} bytes.", inputSize);
-
-        // Get the total blocks
-        blocksNumber = ceil((float)inputSize / options.blockSize) + 1;
-        spdlog::debug("Number of blocks in file: {}.", blocksNumber - 1);
-        spdlog::debug("Last block size: {}. (0 means 'BlockSize')", inputSize % options.blockSize);
-        // Calculate the header size
-        headerSize = 0x18 + (blocksNumber * sizeof(uint32_t));
 
         if (!options.blockSizeFixed)
         {
@@ -202,6 +188,21 @@ int main(int argc, char **argv)
                 options.blockSize = 2352;
             }
         }
+
+        // Get the total blocks
+        blocksNumber = ceil((float)inputSize / options.blockSize) + 1;
+        spdlog::debug("Number of blocks in file: {}.", blocksNumber - 1);
+        spdlog::debug("Last block size: {}. (0 means 'BlockSize')", inputSize % options.blockSize);
+        // Calculate the header size
+        headerSize = 0x18 + (blocksNumber * sizeof(uint32_t));
+
+        spdlog::debug("Option blockSizeFixed: {}", options.blockSizeFixed);
+        spdlog::debug("Option blockSize: {}", options.blockSize);
+        spdlog::debug("Option compressionLevel: {}", options.compressionLevel);
+        spdlog::debug("Option alternativeLz4: {}", options.alternativeLz4);
+        spdlog::debug("Option bruteForce: {}", options.bruteForce);
+        spdlog::debug("Option lz4hc: {}", options.lz4hc);
+        spdlog::debug("Option hdlFix: {}", options.hdlFix);
 
         // Set the header input size and block size
         fileHeader.uncompressedSize = inputSize;
@@ -322,8 +323,7 @@ int main(int argc, char **argv)
                 (uint64_t)inFile.tellg(),
                 readBufferSize,
                 readBufferPos,
-                leftInFile
-            );
+                leftInFile);
             if (leftInFile < toRead)
             {
                 toRead = leftInFile;
@@ -410,6 +410,7 @@ int main(int argc, char **argv)
         spdlog::info("{:<20s} {} bytes", "Total File Size:", fileHeader.uncompressedSize);
         spdlog::info("{:<20s} {}", "Block Size:", fileHeader.blockSize);
         spdlog::info("{:<20s} {}", "Index align:", fileHeader.indexShift);
+        spdlog::debug("Number of blocks in file: {}.", blocksNumber - 1);
 
         // Check if the input file is damaged
         uint64_t headerFileSize = uint64_t(blocks[blocksNumber - 1] & 0x7FFFFFFF) << fileHeader.indexShift;
@@ -420,10 +421,11 @@ int main(int argc, char **argv)
             hdlFixHeaderFileSize = ((headerFileSize >> 11) + 1) << 11;
         }
 
-        if (headerFileSize != inputSize && hdlFixHeaderFileSize != inputSize)
+        if (headerFileSize != inputSize && hdlFixHeaderFileSize != inputSize && options.ignoreHeaderSize == false)
         {
             // The input file doesn't matches the index data and maybe is damaged
-            spdlog::error("ERROR: The input file header is corrupt. Filesize doesn't matches.");
+            spdlog::error("The input file header is corrupt. Filesize doesn't matches.");
+            spdlog::debug("Input file size: {} - Header file size: {} - hdlFixed size: {}.", inputSize, headerFileSize, hdlFixHeaderFileSize);
             return_code = 1;
             goto exit;
         }
@@ -506,6 +508,12 @@ int main(int argc, char **argv)
 
             progress_decompress(inFile.tellg(), inputSize);
         }
+
+        if ((uint64_t)outFile.tellp() != fileHeader.uncompressedSize)
+        {
+            spdlog::error("The output filesize doesn't matches the header filesize.");
+            return_code = 1;
+        }
     }
 
 exit:
@@ -523,7 +531,7 @@ exit:
         auto stop = std::chrono::high_resolution_clock::now();
         auto executionTime = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
         spdlog::info("The file was processed without any problem");
-        spdlog::info("Total execution time: {0.3f}s", executionTime.count() / 1000.0F);
+        spdlog::info("Total execution time: {:0.3f}s", executionTime.count() / 1000.0F);
     }
     else
     {
@@ -852,7 +860,7 @@ int get_options(
             }
             break;
 
-        // short option '-f', long option "--replace"
+        // short option '-r', long option "--replace"
         case 'r':
             options.overwrite = true;
             break;
@@ -963,6 +971,11 @@ int get_options(
             spdlog::set_level(options.logLevel);
             break;
 
+        // Long option --ignore-header-size
+        case 17:
+            options.ignoreHeaderSize = true;
+            break;
+
         case 'h':
         case '?':
             print_help();
@@ -1007,6 +1020,8 @@ void print_help()
             "           Set the output log to a file.\n"
             "    --log-level\n"
             "           Set the log level between the following levels: trace, debug, info, warn, err, critical, off\n"
+            "    --ignore-header-size\n"
+            "           Ignore the output size stored in the header. Usefull to try to decompress the file even when file size is corrupted.\n"
             "\n",
             exeName.c_str(), exeName.c_str(), exeName.c_str(), exeName.c_str(), CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT);
 }

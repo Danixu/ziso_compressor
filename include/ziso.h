@@ -69,6 +69,7 @@ struct opt
     bool hdlFix = false;
     std::string logFile = "";
     spdlog::level::level_enum logLevel = spdlog::level::err;
+    bool ignoreHeaderSize = false;
     bool keepOutput = false;
 } opt_struct;
 
