@@ -146,11 +146,6 @@ int main(int argc, char **argv)
         inputSize = inFile.tellg();
         inFile.seekg(0, std::ios_base::beg);
 
-        // Get the total blocks
-        blocksNumber = ceil((float)inputSize / options.blockSize) + 1;
-        // Calculate the header size
-        headerSize = 0x18 + (blocksNumber * sizeof(uint32_t));
-
         if (!options.blockSizeFixed)
         {
             if (is_cdrom(inFile) && options.blockSize != 2352)
@@ -161,6 +156,11 @@ int main(int argc, char **argv)
             }
         }
 
+        // Get the total blocks
+        blocksNumber = ceil((float)inputSize / options.blockSize) + 1;
+        // Calculate the header size
+        headerSize = 0x18 + (blocksNumber * sizeof(uint32_t));
+
         // Set the header input size and block size
         fileHeader.uncompressedSize = inputSize;
         fileHeader.blockSize = options.blockSize;
@@ -168,7 +168,7 @@ int main(int argc, char **argv)
         // Set shift depending of the input size. Bigger shift means more waste.
         if (inputSize > (uint64_t)(0x3FFFFFFFF - headerSize))
         {
-            // Size is bigger than 17.179.869.183 (16GB-32GB). PS2 games are that big.
+            // Size is bigger than 17.179.869.183 (16GB-32GB). PS2 games aren't that big.
             fileHeader.indexShift = 4;
         }
         if (inputSize > (uint64_t)(0x1FFFFFFFF - headerSize))
@@ -196,7 +196,7 @@ int main(int argc, char **argv)
         // Print the sumary
         fprintf(stdout, "%20s %s\n", "Source:", options.inputFile.c_str());
         fprintf(stdout, "%20s %s\n\n", "Destination:", options.outputFile.c_str());
-        fprintf(stdout, "%20s %llu bytes\n", "Total File Size:", inputSize);
+        fprintf(stdout, "%20s %lu bytes\n", "Total File Size:", inputSize);
         fprintf(stdout, "%20s %d\n", "Block Size:", options.blockSize);
         fprintf(stdout, "%20s %d\n", "Index align:", fileHeader.indexShift);
         fprintf(stdout, "%20s %d\n", "Compress Level:", options.compressionLevel);
@@ -250,7 +250,13 @@ int main(int argc, char **argv)
             // If the current reader position is the end of the buffer, fill the buffer with new data
             if (readBufferPos >= (readBufferSize - 1))
             {
-                inFile.read(readBuffer.data(), readBufferSize);
+                uint32_t inputReadBytes = readBufferSize;
+                uint64_t leftInFile = inputSize - (uint64_t)inFile.tellg();
+                if (inputReadBytes > leftInFile)
+                {
+                    inputReadBytes = leftInFile;
+                }
+                inFile.read(readBuffer.data(), inputReadBytes);
                 readBufferPos = 0;
             }
             // Fill the output with zeroes until a valid start point depending of index shift
@@ -340,10 +346,13 @@ int main(int argc, char **argv)
         blocks.resize(blocksNumber, 0);
         inFile.read((char *)blocks.data(), blocksNumber * sizeof(uint32_t));
 
+        // Set the options blocksize from the fileheader blocksize
+        options.blockSize = fileHeader.blockSize;
+
         // Print the sumary
         fprintf(stdout, "%20s %s\n", "Source:", options.inputFile.c_str());
         fprintf(stdout, "%20s %s\n\n", "Destination:", options.outputFile.c_str());
-        fprintf(stdout, "%20s %llu bytes\n", "Total File Size:", fileHeader.uncompressedSize);
+        fprintf(stdout, "%20s %lu bytes\n", "Total File Size:", fileHeader.uncompressedSize);
         fprintf(stdout, "%20s %d\n", "Block Size:", fileHeader.blockSize);
         fprintf(stdout, "%20s %d\n", "Index align:", fileHeader.indexShift);
 
@@ -928,17 +937,17 @@ static void show_summary(uint64_t outputSize, opt options)
     fprintf(stdout, "--------------------------------------------------------------\n");
     if (options.bruteForce || (!options.lz4hc && !options.alternativeLz4))
     {
-        fprintf(stdout, "LZ4 ............... %7lld ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4Count, MB(summaryData.lz4In), MB(summaryData.lz4Out));
+        fprintf(stdout, "LZ4 ............... %7lu ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4Count, MB(summaryData.lz4In), MB(summaryData.lz4Out));
     }
     if (options.bruteForce || (!options.lz4hc && options.alternativeLz4))
     {
-        fprintf(stdout, "LZ4 M2 ............ %7lld ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4m2Count, MB(summaryData.lz4m2In), MB(summaryData.lz4m2Out));
+        fprintf(stdout, "LZ4 M2 ............ %7lu ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4m2Count, MB(summaryData.lz4m2In), MB(summaryData.lz4m2Out));
     }
     if (!options.bruteForce && options.lz4hc)
     {
-        fprintf(stdout, "LZ4HC ............. %7lld ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4hcCount, MB(summaryData.lz4hcIn), MB(summaryData.lz4hcOut));
+        fprintf(stdout, "LZ4HC ............. %7lu ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4hcCount, MB(summaryData.lz4hcIn), MB(summaryData.lz4hcOut));
     }
-    fprintf(stdout, "RAW ............... %7lld ...... %7.2fMB ...... %7.2fMB\n", summaryData.rawCount, MB(summaryData.raw), MB(summaryData.raw));
+    fprintf(stdout, "RAW ............... %7lu ...... %7.2fMB ...... %7.2fMB\n", summaryData.rawCount, MB(summaryData.raw), MB(summaryData.raw));
     fprintf(stdout, "--------------------------------------------------------------\n");
     fprintf(stdout, "Total ............. %7d ...... %7.2fMb ...... %7.2fMb\n", total_sectors, MB(summaryData.sourceSize), MB(outputSize));
     fprintf(stdout, "ZSO reduction (input vs ZSO) ...................... %3.2f%%\n", (1.0 - (outputSize / (float)summaryData.sourceSize)) * 100);
