@@ -797,7 +797,7 @@ int get_options(
                 }
                 else
                 {
-                    options.blockSize = (uint8_t)temp_argument;
+                    options.blockSize = (uint32_t)temp_argument;
                     options.blockSizeFixed = true;
                 }
             }
