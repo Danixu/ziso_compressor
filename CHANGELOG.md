@@ -2,7 +2,7 @@
 
 ## v0.5.2
 
-* Fixed a bug decompressing non standard blocksize files, like for example CDROM's (blocksize 2352)
+* Fixed a bug compressing/decompressing non standard blocksize files, like for example CDROM's (blocksize 2352)
 * Fixed a bug calculating the compression percentage and its ratio in progress message.
 
 ## v0.5.1
