@@ -211,7 +211,7 @@ int main(int argc, char **argv)
         // Set shift depending of the input size. Bigger shift means more waste.
         if (inputSize > (uint64_t)(0x3FFFFFFFF - headerSize))
         {
-            // Size is bigger than 17.179.869.183 (16GB-32GB). PS2 games are that big.
+            // Size is bigger than 17.179.869.183 (16GB-32GB). PS2 games aren't that big.
             fileHeader.indexShift = 4;
         }
         if (inputSize > (uint64_t)(0x1FFFFFFFF - headerSize))
@@ -298,13 +298,22 @@ int main(int argc, char **argv)
         for (uint32_t currentBlock = 0; currentBlock < blocksNumber - 1; currentBlock++)
         {
             spdlog::trace("Compressing the block {}.", currentBlock + 1);
+
             // If the current reader position is the end of the buffer, fill the buffer with new data
             if (readBufferPos >= (readBufferSize - 1))
             {
                 spdlog::trace("The read buffer is empty. Filling it with the input file data.");
-                inFile.read(readBuffer.data(), readBufferSize);
+                uint32_t inputReadBytes = readBufferSize;
+                uint64_t leftInFile = inputSize - (uint64_t)inFile.tellg();
+                if (inputReadBytes > leftInFile)
+                {
+                    inputReadBytes = leftInFile;
+                }
+                spdlog::trace("{} bytes will be read from input file", inputReadBytes);
+                inFile.read(readBuffer.data(), inputReadBytes);
                 readBufferPos = 0;
             }
+
             // Fill the output with zeroes until a valid start point depending of index shift
             spdlog::trace("Aligning the output buffer to the nearest shifted position.");
             uint16_t alignment = buffer_align(writeBuffer.data() + writeBufferPos, (uint64_t)outFile.tellp() + writeBufferPos, fileHeader.indexShift);
@@ -338,16 +347,26 @@ int main(int argc, char **argv)
                 options.blockSize,
                 uncompressed,
                 options);
+            spdlog::trace("CompressedBytes: {}", compressedBytes);
 
             readBufferPos += toRead;
 
             if (compressedBytes > 0)
             {
                 writeBufferPos += compressedBytes;
+
+                spdlog::trace(
+                    "Output Position: {} - Output Buffer Size: {} - Output Buffer Position: {} - Block Compressed Size: {}",
+                    (uint64_t)outFile.tellg(),
+                    writeBuffer.size(),
+                    writeBufferPos,
+                    compressedBytes);
+
                 if (
                     ((writeBuffer.size() - writeBufferPos) < (options.blockSize * 2)) ||
                     (currentBlock == (blocksNumber - 2)))
                 {
+                    spdlog::trace("Flushing write buffer...");
                     outFile.write(writeBuffer.data(), writeBufferPos);
                     writeBufferPos = 0;
                 }
@@ -366,21 +385,26 @@ int main(int argc, char **argv)
             progress_compress((uint64_t)inFile.tellg() + readBufferPos, inputSize, (uint64_t)blockStartPosition - headerSize);
         }
 
+        spdlog::trace("Aligning the last block from: {}...", outFile.tellp());
         // Align the file and set the eof position block
         file_align(outFile, fileHeader.indexShift);
         uint64_t blockEndPosition = outFile.tellp();
         blocks[blocksNumber - 1] = (blockEndPosition >> fileHeader.indexShift);
+        spdlog::trace("Aligned block position: {}...", outFile.tellp());
 
         // The HDL_dump bug trims the data at the end of the file if doesn't fit into a 2048 multiple.
         // This fix will pad the output file to the nearest 2048 bytes multiple.
         if (options.hdlFix)
         {
+            spdlog::trace("Aplying the HDL fix to avoid the files to be truncated on copy");
             file_align(outFile, 11);
         }
 
         // Write the blocks index
+        spdlog::trace("Writting the index data (overwrite)");
         outFile.seekp(0x18);
         outFile.write((const char *)blocks.data(), blocksNumber * sizeof(uint32_t));
+        spdlog::trace("Writen {} bytes at {} position", blocksNumber * sizeof(uint32_t), 0x18);
 
         outFile.seekp(0, std::ios_base::end);
         show_summary(outFile.tellp(), options);
@@ -403,6 +427,9 @@ int main(int argc, char **argv)
         // Reserve and read the blocks index
         blocks.resize(blocksNumber, 0);
         inFile.read((char *)blocks.data(), blocksNumber * sizeof(uint32_t));
+
+        // Set the options blocksize from the fileheader blocksize
+        options.blockSize = fileHeader.blockSize;
 
         // Print the sumary
         spdlog::info("{:<20s} {}", "Source:", options.inputFile.c_str());
@@ -450,10 +477,18 @@ int main(int argc, char **argv)
             uint64_t blockEndPosition = uint64_t(blocks[currentBlock + 1] & 0x7FFFFFFF) << fileHeader.indexShift;
             uint64_t currentBlockSize = blockEndPosition - blockStartPosition;
 
+            spdlog::trace(
+                "Block Start Position: {} - Block End Position: {} - Block Size: {} - Uncompressed: {}",
+                blockStartPosition,
+                blockEndPosition,
+                currentBlockSize,
+                uncompressed);
+
             uint32_t leftInReadBuffer = readBufferSize - readBufferPos;
             //  If the current reader position is the end of the buffer, fill the buffer with new data
             if (currentBlockSize > leftInReadBuffer)
             {
+                spdlog::trace("The reader buffer is empty... reading more data.");
                 // Get the data left in file
                 uint64_t leftInFile = inputSize - inFile.tellg();
 
@@ -486,6 +521,8 @@ int main(int argc, char **argv)
                 options.blockSize,
                 uncompressed);
 
+            spdlog::trace("Decompressed data bytes: {}", decompressedBytes);
+
             if (decompressedBytes > 0)
             {
                 readBufferPos += currentBlockSize;
@@ -511,7 +548,7 @@ int main(int argc, char **argv)
 
         if ((uint64_t)outFile.tellp() != fileHeader.uncompressedSize)
         {
-            spdlog::error("The output filesize doesn't matches the header filesize.");
+            spdlog::error("The output filesize doesn't matches the header filesize. {} vs {}", fileHeader.uncompressedSize, outFile.tellp());
             return_code = 1;
         }
     }
