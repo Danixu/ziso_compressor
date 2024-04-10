@@ -1,5 +1,14 @@
 # Ziso Changelog
 
+## v0.5.2
+
+* Fixed a bug compressing/decompressing non standard blocksize files, like for example CDROM's (blocksize 2352)
+* Fixed a bug calculating the compression percentage and its ratio in progress message.
+
+## v0.5.1
+
+* Added a fix to a bug in the hdl_dump program which causes corruption when a compressed file is copied and its size is not divisible by 2048.
+
 ## v0.5.0
 
 * First version of the program.
