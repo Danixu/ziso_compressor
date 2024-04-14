@@ -1100,19 +1100,19 @@ static void show_summary(uint64_t outputSize, opt options)
     fprintf(stdout, "--------------------------------------------------------------\n");
     if (options.bruteForce || (!options.lz4hc && !options.alternativeLz4))
     {
-        fprintf(stdout, "LZ4 ............... %7lu ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4Count, MB(summaryData.lz4In), MB(summaryData.lz4Out));
+        fprintf(stdout, "LZ4 ............... %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.lz4Count, MB(summaryData.lz4In), MB(summaryData.lz4Out));
     }
     if (options.bruteForce || (!options.lz4hc && options.alternativeLz4))
     {
-        fprintf(stdout, "LZ4 M2 ............ %7lu ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4m2Count, MB(summaryData.lz4m2In), MB(summaryData.lz4m2Out));
+        fprintf(stdout, "LZ4 M2 ............ %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.lz4m2Count, MB(summaryData.lz4m2In), MB(summaryData.lz4m2Out));
     }
     if (!options.bruteForce && options.lz4hc)
     {
-        fprintf(stdout, "LZ4HC ............. %7lu ...... %7.2fMB ...... %7.2fMB\n", summaryData.lz4hcCount, MB(summaryData.lz4hcIn), MB(summaryData.lz4hcOut));
+        fprintf(stdout, "LZ4HC ............. %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.lz4hcCount, MB(summaryData.lz4hcIn), MB(summaryData.lz4hcOut));
     }
-    fprintf(stdout, "RAW ............... %7lu ...... %7.2fMB ...... %7.2fMB\n", summaryData.rawCount, MB(summaryData.raw), MB(summaryData.raw));
+    fprintf(stdout, "RAW ............... %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.rawCount, MB(summaryData.raw), MB(summaryData.raw));
     fprintf(stdout, "--------------------------------------------------------------\n");
-    fprintf(stdout, "Total ............. %7d ...... %7.2fMb ...... %7.2fMb\n", total_sectors, MB(summaryData.sourceSize), MB(outputSize));
+    fprintf(stdout, "Total ............. %7lu ...... %7.2fMb ...... %7.2fMb\n", (unsigned long)total_sectors, MB(summaryData.sourceSize), MB(outputSize));
     fprintf(stdout, "ZSO reduction (input vs ZSO) ...................... %3.2f%%\n", (1.0 - (outputSize / (float)summaryData.sourceSize)) * 100);
     fprintf(stdout, "\n\n");
 }
