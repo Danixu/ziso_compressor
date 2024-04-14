@@ -13,6 +13,8 @@
 #include <cmath>
 #include <vector>
 
+#include "spdlog/spdlog.h"
+
 // The LZ4_ACCELERATION_MAX is defined in the lz4.c file and is about 65537 (now).
 // Testing I have noticed that above 1024 the compression was almost the same, so I'll set the max there.
 #define LZ4_MAX_ACCELERATION 1024
@@ -65,6 +67,9 @@ struct opt
     bool lz4hc = false;
     bool overwrite = false;
     bool hdlFix = false;
+    std::string logFile = "";
+    spdlog::level::level_enum logLevel = spdlog::level::err;
+    bool ignoreHeaderSize = false;
     bool keepOutput = false;
 } opt_struct;
 
