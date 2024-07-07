@@ -9,15 +9,15 @@ This ziso compressor is an alternative to the ziso.py compressor that I have fou
 * It includes an alternative compression method which can reduce the size in some cases.
 * Brute force compression to use the best compression method between the two LZ4 methods.
 * It's 40-45% faster than the ziso.py conversor.
-* It's able to detect CD-ROM images and adjust the blocksize according with their sector size.
+* ~~It's able to detect CD-ROM images and adjust the blocksize according with their sector size.~~ Removed due to an incompatibility of OPL with blocksizes different from 2048.
 
 ## ToDo
 
 There are some things I'd like to do, like for example:
 
 * ~~Try to add read and write buffers to improve the speed~~ -> 50-55% faster compressing and up to 70% decompressing.
-* ~~CD-ROM detection to select the best block size (DVD -> 2048 vs CD-ROM -> 2352)~~ -> Done. Now the program detects CDROM images.
-* Add Multi Thread processing.
+* ~~CD-ROM detection to select the best block size (DVD -> 2048 vs CD-ROM -> 2352)~~ -> ~~Done. Now the program detects CDROM images.~~ Removed...
+* ~~Add Multi Thread processing.~~ Don't worth it, the compression is very fast in modern processors.
 
 ## Compile
 
@@ -79,9 +79,9 @@ ziso.exe -i <input-file> -o <output-file>
 
 #### Compression
 
-The standard LZ4 method doesn't have compression level arguments. Instead, it has **acceleration** which will affects the speed and compression ratio (just like the compression arguments). On my program I use the **acceleration** to supply the compression level.
+The standard LZ4 method doesn't have compression level argument. Instead, it has **acceleration** which will affects the speed and compression ratio (just like the way a compression argument will do). On my program I translate the compression level argument to a usable **acceleration** level.
 
-The LZ4HC method already includes the compression option, so it will passed to it directly.
+The LZ4HC method already includes the compression option, so the program will pass the compression level directly to the compressor.
 
 #### Alternative LZ4 compression method
 
