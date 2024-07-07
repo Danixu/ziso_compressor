@@ -1,6 +1,6 @@
 #define TITLE "ziso - ZSO compressor/decompressor"
 #define COPYR "Created by Daniel Carrasco (2023)"
-#define VERSI "0.5.2"
+#define VERSI "0.6.1"
 
 #include "banner.h"
 #include <chrono>

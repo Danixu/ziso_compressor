@@ -385,12 +385,12 @@ int main(int argc, char **argv)
             progress_compress((uint64_t)inFile.tellg() + readBufferPos, inputSize, (uint64_t)blockStartPosition - headerSize);
         }
 
-        spdlog::trace("Aligning the last block from: {}...", outFile.tellp());
+        spdlog::trace("Aligning the last block from: {}...", (uint64_t)outFile.tellp());
         // Align the file and set the eof position block
         file_align(outFile, fileHeader.indexShift);
         uint64_t blockEndPosition = outFile.tellp();
         blocks[blocksNumber - 1] = (blockEndPosition >> fileHeader.indexShift);
-        spdlog::trace("Aligned block position: {}...", outFile.tellp());
+        spdlog::trace("Aligned block position: {}...", (uint64_t)outFile.tellp());
 
         // The HDL_dump bug trims the data at the end of the file if doesn't fit into a 2048 multiple.
         // This fix will pad the output file to the nearest 2048 bytes multiple.
@@ -422,7 +422,7 @@ int main(int argc, char **argv)
         inFile.read(reinterpret_cast<char *>(&fileHeader), sizeof(fileHeader));
 
         // Calculate the blocks number
-        blocksNumber = ceil(fileHeader.uncompressedSize / fileHeader.blockSize) + 1;
+        blocksNumber = ceil((float)fileHeader.uncompressedSize / fileHeader.blockSize) + 1;
 
         // Reserve and read the blocks index
         blocks.resize(blocksNumber, 0);
@@ -478,32 +478,12 @@ int main(int argc, char **argv)
             uint64_t currentBlockSize = blockEndPosition - blockStartPosition;
 
             spdlog::trace(
-                "Block Start Position: {} - Block End Position: {} - Block Size: {} - Uncompressed: {}",
+                "Current Block: {} - Block Start Position: {} - Block End Position: {} - Block Size: {} - Uncompressed: {}",
+                currentBlock + 1,
                 blockStartPosition,
                 blockEndPosition,
                 currentBlockSize,
                 uncompressed);
-
-            uint32_t leftInReadBuffer = readBufferSize - readBufferPos;
-            //  If the current reader position is the end of the buffer, fill the buffer with new data
-            if (currentBlockSize > leftInReadBuffer)
-            {
-                spdlog::trace("The reader buffer is empty... reading more data.");
-                // Get the data left in file
-                uint64_t leftInFile = inputSize - inFile.tellg();
-
-                // To Read
-                uint64_t toRead = readBufferSize - leftInReadBuffer;
-                if (toRead > leftInFile)
-                {
-                    toRead = leftInFile;
-                }
-
-                // Move the data buffer to the start point
-                std::memmove(readBuffer.data(), readBuffer.data() + readBufferPos, leftInReadBuffer);
-                inFile.read(readBuffer.data() + leftInReadBuffer, toRead);
-                readBufferPos = 0;
-            }
 
             // The current block size cannot exceed 2 x blockSize.
             if (currentBlockSize > (fileHeader.blockSize * 2))
@@ -514,12 +494,51 @@ int main(int argc, char **argv)
                 goto exit;
             }
 
+            uint32_t leftInReadBuffer = readBufferSize - readBufferPos;
+            //  If the current reader position is the end of the buffer, fill the buffer with new data
+            if (currentBlockSize > leftInReadBuffer)
+            {
+                // At the first block, the input file must be synced to the start point or can be missaligned
+                if (currentBlock == 0)
+                {
+                    inFile.seekg(blockStartPosition);
+                }
+                spdlog::trace("The reader buffer is empty... reading more data.");
+                // Get the data left in file
+                uint64_t leftInFile = inputSize - inFile.tellg();
+                spdlog::trace("There are {} bytes left in the file.", leftInFile);
+
+                // To Read
+                uint64_t toRead = readBufferSize - leftInReadBuffer;
+                if (toRead > leftInFile)
+                {
+                    toRead = leftInFile;
+                }
+                spdlog::trace("{} bytes will be read.", toRead);
+
+                // Move the data buffer to the start point
+                std::memmove(readBuffer.data(), readBuffer.data() + readBufferPos, leftInReadBuffer);
+                spdlog::trace("Current file position: {}", (uint64_t)inFile.tellp());
+                inFile.read(readBuffer.data() + leftInReadBuffer, toRead);
+                spdlog::trace("New file position: {}", (uint64_t)inFile.tellp());
+                readBufferPos = 0;
+            }
+
             int decompressedBytes = decompress_block(
                 readBuffer.data() + readBufferPos,
                 currentBlockSize,
                 writeBuffer.data() + writeBufferPos,
                 options.blockSize,
                 uncompressed);
+
+            if (currentBlock == (blocksNumber - 2))
+            {
+                // The LZ4 compressor seems not to be taking into account of the input data size to limit the decompressed data
+                // Or at least is not reporting the correct decompressed size.
+                // This is a fix to avoid this problem calculating the correct last block size instead to use the LZ4 compressor reported size.
+                decompressedBytes = fileHeader.uncompressedSize - ((uint64_t)outFile.tellp() + writeBufferPos);
+                spdlog::trace("Fixed the last block size to: {}", decompressedBytes);
+            }
 
             spdlog::trace("Decompressed data bytes: {}", decompressedBytes);
 
@@ -548,7 +567,7 @@ int main(int argc, char **argv)
 
         if ((uint64_t)outFile.tellp() != fileHeader.uncompressedSize)
         {
-            spdlog::error("The output filesize doesn't matches the header filesize. {} vs {}", fileHeader.uncompressedSize, outFile.tellp());
+            spdlog::error("The output filesize doesn't matches the header filesize. {} vs {}", fileHeader.uncompressedSize, (uint64_t)outFile.tellp());
             return_code = 1;
         }
     }
