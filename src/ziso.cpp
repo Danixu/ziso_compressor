@@ -178,12 +178,16 @@ int main(int argc, char **argv)
 
         if (!options.blockSizeFixed)
         {
-            if (is_cdrom(inFile) && options.blockSize != 2352)
+            if (is_cdrom(inFile))
             {
-                spdlog::warn("CD-ROM detected... Changing the block size to 2352.");
-                spdlog::warn("If you want to keep the original block size please use the '--block-size 2048' option.");
-                options.blockSize = 2352;
+                spdlog::warn("CD-ROM detected... It's recommended to convert the file to ISO.");
             }
+        }
+        else if (options.blockSize != 2048)
+        {
+            spdlog::warn(
+                "OPL is not compatible with blocks size bigger than 2048. If you plan to use this ZSO on OPL, "
+                "please check if your OPL version is compatible.");
         }
 
         // Get the total blocks
