@@ -5,6 +5,6 @@ target_include_directories(ziso PUBLIC
     ../lib/lz4/lib/
     ../lib/spdlog/include/
 )
-set_target_properties(ziso PROPERTIES CXX_STANDARD 17)
+set_target_properties(ziso PROPERTIES CXX_STANDARD 23)
 
 target_link_libraries(ziso PRIVATE stdc++ -static lz4)

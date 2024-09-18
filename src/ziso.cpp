@@ -5,35 +5,32 @@
 
 // Arguments list
 const char *const short_options = "i:o:c:b:rh";
-static struct option long_options[] = {
+const std::vector<option> long_options = {
     // Long and short options
-    {"input", required_argument, NULL, 'i'},
-    {"output", required_argument, NULL, 'o'},
-    {"compression-level", required_argument, NULL, 'c'},
-    {"block-size", required_argument, NULL, 'b'},
-    {"replace", no_argument, NULL, 'r'},
-    {"help", no_argument, NULL, 'h'},
+    {"input", required_argument, nullptr, 'i'},
+    {"output", required_argument, nullptr, 'o'},
+    {"compression-level", required_argument, nullptr, 'c'},
+    {"block-size", required_argument, nullptr, 'b'},
+    {"replace", no_argument, nullptr, 'r'},
+    {"help", no_argument, nullptr, 'h'},
 
     // Long only options
-    {"mode2-lz4", no_argument, NULL, 10},
-    {"lz4hc", no_argument, NULL, 11},
-    {"brute-force", no_argument, NULL, 12},
-    {"cache-size", required_argument, NULL, 13},
-    {"hdl-fix", no_argument, NULL, 14},
-    {"log-file", required_argument, NULL, 15},
-    {"log-level", required_argument, NULL, 16},
-    {"ignore-header-size", no_argument, NULL, 17},
-    {NULL, 0, NULL, 0}};
+    {"mode2-lz4", no_argument, nullptr, 10},
+    {"lz4hc", no_argument, nullptr, 11},
+    {"brute-force", no_argument, nullptr, 12},
+    {"cache-size", required_argument, nullptr, 13},
+    {"hdl-fix", no_argument, nullptr, 14},
+    {"log-file", required_argument, nullptr, 15},
+    {"log-level", required_argument, nullptr, 16},
+    {"ignore-header-size", no_argument, nullptr, 17},
+    {nullptr, 0, nullptr, 0}};
 
 // global variales
 uint8_t lastProgress = 100; // Force at 0% of progress
 summary summaryData;
-std::string exeName;
 
 int main(int argc, char **argv)
 {
-    std::filesystem::path p(argv[0]);
-    exeName = p.filename().string();
     // Start the timer to measure execution time
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -90,8 +87,8 @@ int main(int argc, char **argv)
 
     // Check if the file is a ZISO File
     {
-        char file_format[5] = {0};
-        inFile.read(file_format, 4);
+        std::vector<char> file_format(5, 0);
+        inFile.read(file_format.data(), 4);
 
         if (
             file_format[0] == 'Z' &&
@@ -167,7 +164,7 @@ int main(int argc, char **argv)
     spdlog::debug("Option cacheSize: {}", options.cacheSize);
     spdlog::debug("Option overwrite: {}", options.overwrite);
     spdlog::debug("Option logFile: {}", options.logFile);
-    spdlog::debug("Option logLevel: {}", (int)options.logLevel);
+    spdlog::debug("Option logLevel: {}", std::to_underlying(options.logLevel));
     spdlog::debug("Option keepOutput: {}", options.keepOutput);
 
     if (options.compress)
@@ -851,7 +848,7 @@ int get_options(
 
     std::string optarg_s;
 
-    while ((ch = getopt_long(argc, argv, short_options, long_options, NULL)) != -1)
+    while ((ch = getopt_long(argc, argv, short_options, long_options.data(), nullptr)) != -1)
     {
         // check to see if a single character or long option came through
         switch (ch)
@@ -1040,7 +1037,6 @@ int get_options(
         case '?':
             print_help();
             return 1;
-            break;
         }
     }
 
@@ -1054,10 +1050,10 @@ void print_help()
             "\n\nUsage:\n"
             "\n"
             "The program detects ziso sources and selects the decompression mode:\n"
-            "    %s -i/--input example.iso\n"
-            "    %s -i/--input example.iso -o/--output example.zso\n"
-            "    %s -i/--input example.zso\n"
-            "    %s -i/--input example.zso -o/--output example.iso\n"
+            "    ziso -i/--input example.iso\n"
+            "    ziso -i/--input example.iso -o/--output example.zso\n"
+            "    ziso -i/--input example.zso\n"
+            "    ziso -i/--input example.zso -o/--output example.iso\n"
             "Optional options:\n"
             "    -c/--compression-level 1-12\n"
             "           Compression level to be used. By default 12.\n"
@@ -1083,7 +1079,7 @@ void print_help()
             "    --ignore-header-size\n"
             "           Ignore the output size stored in the header. Usefull to try to decompress the file even when file size is corrupted.\n"
             "\n",
-            exeName.c_str(), exeName.c_str(), exeName.c_str(), exeName.c_str(), CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT);
+            CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT);
 }
 
 static void progress_compress(uint64_t currentInput, uint64_t totalInput, uint64_t currentOutput)
