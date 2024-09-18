@@ -1,7 +1,3 @@
-#define TITLE "ziso - ZSO compressor/decompressor"
-#define COPYR "Created by Daniel Carrasco (2023)"
-#define VERSI "0.6.1"
-
 #include "banner.h"
 #include <chrono>
 #include <getopt.h>
@@ -17,8 +13,8 @@
 
 // The LZ4_ACCELERATION_MAX is defined in the lz4.c file and is about 65537 (now).
 // Testing I have noticed that above 1024 the compression was almost the same, so I'll set the max there.
-#define LZ4_MAX_ACCELERATION 1024
-uint16_t lz4_compression_level[12] = {
+constexpr uint16_t LZ4_MAX_ACCELERATION = 1024;
+const uint16_t lz4_compression_level[12] = {
     LZ4_MAX_ACCELERATION,
     uint16_t(LZ4_MAX_ACCELERATION *((float)10 / 11)),
     uint16_t(LZ4_MAX_ACCELERATION *((float)9 / 11)),
@@ -36,20 +32,20 @@ uint16_t lz4_compression_level[12] = {
 #define MB(x) ((float)(x) / 1024 / 1024)
 
 // Max Cache Size
-#define CACHE_SIZE_MAX 128
-#define CACHE_SIZE_DEFAULT 4
+constexpr uint8_t CACHE_SIZE_MAX = 128;
+constexpr uint8_t CACHE_SIZE_DEFAULT = 4;
 
 #pragma pack(push)
 #pragma pack(1)
 struct zheader
 {
-    char magic[4] = {'Z', 'I', 'S', 'O'}; // Always "ZISO".
-    uint32_t headerSize = 0x18;           // Always 0x18.
-    uint64_t uncompressedSize = 0;        // Total size of original ISO.
-    uint32_t blockSize = 2048;            // Size of each block, usually 2048.
-    uint8_t version = 1;                  // Always 1.
-    uint8_t indexShift = 0;               // Indicates left shift of index values.
-    uint8_t unused[2] = {0, 0};           // Always 0.
+    const char magic[4] = {'Z', 'I', 'S', 'O'}; // Always "ZISO".
+    const uint32_t headerSize = 0x18;           // Always 0x18.
+    uint64_t uncompressedSize = 0;              // Total size of original ISO.
+    uint32_t blockSize = 2048;                  // Size of each block, usually 2048.
+    const uint8_t version = 1;                  // Always 1.
+    uint8_t indexShift = 0;                     // Indicates left shift of index values.
+    const uint8_t unused[2] = {0, 0};           // Always 0.
 } ziso_header;
 #pragma pack(pop)
 
