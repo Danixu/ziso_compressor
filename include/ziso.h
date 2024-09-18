@@ -106,7 +106,8 @@ inline uint32_t compress_block(
     char *dst,
     uint32_t dstSize,
     bool &uncompressed,
-    opt options);
+    opt options,
+    summary &summaryData);
 
 inline uint32_t decompress_block(
     const char *src,
@@ -144,6 +145,6 @@ int get_options(
     char **argv,
     opt &options);
 
-static void progress_compress(uint64_t currentInput, uint64_t totalInput, uint64_t currentOutput);
-static void progress_decompress(uint64_t currentInput, uint64_t totalInput);
-static void show_summary(uint64_t outputSize, opt options);
+static void progress_compress(uint64_t currentInput, uint64_t totalInput, uint64_t currentOutput, uint8_t &lastProgress);
+static void progress_decompress(uint64_t currentInput, uint64_t totalInput, uint8_t &lastProgress);
+static void show_summary(uint64_t outputSize, opt options, summary summaryData);

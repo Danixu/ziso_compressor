@@ -5,7 +5,7 @@
 void banner(void)
 {
     printf("ziso - ZSO compressor/decompressor\n"
-           "Created by Daniel Carrasco (2023)\n"
+           "Created by Daniel Carrasco (2024)\n"
            "Improved version 0.7.0"
            " (%d-bit "
 

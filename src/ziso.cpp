@@ -25,10 +25,6 @@ const std::vector<option> long_options = {
     {"ignore-header-size", no_argument, nullptr, 17},
     {nullptr, 0, nullptr, 0}};
 
-// global variales
-uint8_t lastProgress = 100; // Force at 0% of progress
-summary summaryData;
-
 int main(int argc, char **argv)
 {
     // Start the timer to measure execution time
@@ -47,6 +43,10 @@ int main(int argc, char **argv)
     uint64_t inputSize;
     uint32_t blocksNumber;
     uint32_t headerSize;
+
+    // Progress
+    uint8_t lastProgress = 100; // Force at 0% of progress
+    summary summaryData;
 
     // Blocks data
     std::vector<uint32_t> blocks;
@@ -320,7 +320,6 @@ int main(int argc, char **argv)
             uint16_t alignment = buffer_align(writeBuffer.data() + writeBufferPos, (uint64_t)outFile.tellp() + writeBufferPos, fileHeader.indexShift);
             writeBufferPos += alignment;
             spdlog::trace("The new aligned position is {}.", (uint64_t)outFile.tellp() + writeBufferPos);
-            // file_align(outFile, fileHeader.indexShift);
 
             // Capture the block position
             uint64_t blockStartPosition = (uint64_t)outFile.tellp() + writeBufferPos;
@@ -347,7 +346,8 @@ int main(int argc, char **argv)
                 writeBuffer.data() + writeBufferPos,
                 options.blockSize,
                 uncompressed,
-                options);
+                options,
+                summaryData);
             spdlog::trace("CompressedBytes: {}", compressedBytes);
 
             readBufferPos += toRead;
@@ -380,10 +380,10 @@ int main(int argc, char **argv)
             }
 
             // Set the current block start point with the uncompressed flag
-            blocks[currentBlock] = (blockStartPosition >> fileHeader.indexShift) | (uncompressed << 31);
+            blocks[currentBlock] = (blockStartPosition >> fileHeader.indexShift) | ((uint32_t)uncompressed << 31);
 
             // Update the progress
-            progress_compress((uint64_t)inFile.tellg() + readBufferPos, inputSize, (uint64_t)blockStartPosition - headerSize);
+            progress_compress((uint64_t)inFile.tellg() + readBufferPos, inputSize, blockStartPosition - headerSize, lastProgress);
         }
 
         spdlog::trace("Aligning the last block from: {}...", (uint64_t)outFile.tellp());
@@ -408,7 +408,7 @@ int main(int argc, char **argv)
         spdlog::trace("Writen {} bytes at {} position", blocksNumber * sizeof(uint32_t), 0x18);
 
         outFile.seekp(0, std::ios_base::end);
-        show_summary(outFile.tellp(), options);
+        show_summary(outFile.tellp(), options, summaryData);
     }
     else
     {
@@ -495,9 +495,9 @@ int main(int argc, char **argv)
                 goto exit;
             }
 
-            uint32_t leftInReadBuffer = readBufferSize - readBufferPos;
             //  If the current reader position is the end of the buffer, fill the buffer with new data
-            if (currentBlockSize > leftInReadBuffer)
+            if (uint32_t leftInReadBuffer = readBufferSize - readBufferPos;
+                currentBlockSize > leftInReadBuffer)
             {
                 // At the first block, the input file must be synced to the start point or can be missaligned
                 if (currentBlock == 0)
@@ -563,7 +563,7 @@ int main(int argc, char **argv)
                 goto exit;
             }
 
-            progress_decompress(inFile.tellg(), inputSize);
+            progress_decompress(inFile.tellg(), inputSize, lastProgress);
         }
 
         if ((uint64_t)outFile.tellp() != fileHeader.uncompressedSize)
@@ -618,7 +618,8 @@ inline uint32_t compress_block(
     char *dst,
     uint32_t dstSize,
     bool &uncompressed,
-    opt options)
+    const opt options,
+    summary &summaryData)
 {
     // The source size will be the same always
     summaryData.sourceSize += srcSize;
@@ -684,9 +685,6 @@ inline uint32_t compress_block(
     {
         if (options.lz4hc)
         {
-
-            // outSize = LZ4_compress_HC(src, dst, srcSize, dstSize, options.compressionLevel);
-
             LZ4_streamHC_t lz4_state;
             LZ4_resetStreamHC(&lz4_state, options.compressionLevel);
             outSize = LZ4_compress_HC_continue(&lz4_state, src, dst, srcSize, dstSize);
@@ -792,14 +790,14 @@ bool is_cdrom(std::fstream &fIn)
 
     // Read three sectors to ensure that the disk is a CDROM
     std::vector<char> buffer(12, 0);
-    unsigned char cdSync[] = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00};
+    std::vector<unsigned char> cdSync = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00};
     for (uint8_t i = 0; i < 3; i++)
     {
         fIn.seekg(i * 2352);
         fIn.read(buffer.data(), buffer.size());
 
         if (
-            std::strncmp(buffer.data(), (char *)cdSync, 12) != 0)
+            std::strncmp(buffer.data(), (char *)cdSync.data(), 12) != 0)
         {
             fIn.seekg(currentPos);
             return false;
@@ -811,8 +809,8 @@ bool is_cdrom(std::fstream &fIn)
 
 void file_align(std::fstream &fOut, uint8_t shift)
 {
-    uint16_t paddingLostBytes = fOut.tellp() % (1 << shift);
-    if (paddingLostBytes)
+    if (uint16_t paddingLostBytes = fOut.tellp() % (1 << shift);
+        paddingLostBytes)
     {
         uint16_t alignment = (1 << shift) - paddingLostBytes;
         for (uint64_t i = 0; i < alignment; i++)
@@ -824,8 +822,8 @@ void file_align(std::fstream &fOut, uint8_t shift)
 
 uint16_t buffer_align(char *buffer, uint64_t currentPosition, uint8_t shift)
 {
-    uint16_t paddingLostBytes = currentPosition % (1 << shift);
-    if (paddingLostBytes)
+    if (uint16_t paddingLostBytes = currentPosition % (1 << shift);
+        paddingLostBytes)
     {
         uint16_t alignment = (1 << shift) - paddingLostBytes;
         std::memset(buffer, 0, alignment);
@@ -873,7 +871,7 @@ int get_options(
 
                 if (temp_argument < 1 || temp_argument > 12)
                 {
-                    fprintf(stderr, "\n\nERROR: the provided compression level option is not correct.\n\n");
+                    std::print(std::cerr, "\n\nERROR: the provided compression level option is not correct.\n\n");
                     print_help();
                     return 1;
                 }
@@ -884,7 +882,7 @@ int get_options(
             }
             catch (std::exception const &e)
             {
-                fprintf(stderr, "\n\nERROR: the provided compression level is not correct.\n\n");
+                std::print(std::cerr, "\n\nERROR: the provided compression level is not correct.\n\n");
                 print_help();
                 return 1;
             }
@@ -899,7 +897,7 @@ int get_options(
 
                 if (!temp_argument || temp_argument < 512)
                 {
-                    fprintf(stderr, "\n\nERROR: the provided block size is not correct. Must be at least 512.\n\n");
+                    std::print(std::cerr, "\n\nERROR: the provided block size is not correct. Must be at least 512.\n\n");
                     print_help();
                     return 1;
                 }
@@ -911,7 +909,7 @@ int get_options(
             }
             catch (std::exception const &e)
             {
-                fprintf(stderr, "\n\nERROR: the provided block size is not correct.\n\n");
+                std::print(std::cerr, "\n\nERROR: the provided block size is not correct.\n\n");
                 print_help();
                 return 1;
             }
@@ -946,19 +944,19 @@ int get_options(
 
                 if (!temp_argument)
                 {
-                    fprintf(stderr, "\n\nERROR: the provided cache size is not correct.\n\n");
+                    std::print(std::cerr, "\n\nERROR: the provided cache size is not correct.\n\n");
                     print_help();
                     return 1;
                 }
                 else if (temp_argument > CACHE_SIZE_MAX)
                 {
-                    fprintf(stderr, "\n\nERROR: the provided cache size is not correct. Must be less than %uMB\n\n", CACHE_SIZE_MAX);
+                    std::print(std::cerr, "\n\nERROR: the provided cache size is not correct. Must be less than %uMB\n\n", CACHE_SIZE_MAX);
                     print_help();
                     return 1;
                 }
                 else if (temp_argument < 1)
                 {
-                    fprintf(stderr, "\n\nERROR: the provided cache size is not correct. Must be at least 1MB\n\n");
+                    std::print(std::cerr, "\n\nERROR: the provided cache size is not correct. Must be at least 1MB\n\n");
                     print_help();
                     return 1;
                 }
@@ -969,7 +967,7 @@ int get_options(
             }
             catch (std::exception const &e)
             {
-                fprintf(stderr, "\n\nERROR: the provided block size is not correct.\n\n");
+                std::print(std::cerr, "\n\nERROR: the provided block size is not correct.\n\n");
                 print_help();
                 return 1;
             }
@@ -1020,7 +1018,7 @@ int get_options(
             }
             else
             {
-                fprintf(stderr, "\n\nERROR: The provided log level is incorrect.\n\n");
+                std::print(std::cerr, "\n\nERROR: The provided log level is incorrect.\n\n");
                 print_help();
                 return 1;
             }
@@ -1035,6 +1033,7 @@ int get_options(
 
         case 'h':
         case '?':
+        default:
             print_help();
             return 1;
         }
@@ -1046,92 +1045,92 @@ int get_options(
 void print_help()
 {
     banner();
-    fprintf(stdout,
-            "\n\nUsage:\n"
-            "\n"
-            "The program detects ziso sources and selects the decompression mode:\n"
-            "    ziso -i/--input example.iso\n"
-            "    ziso -i/--input example.iso -o/--output example.zso\n"
-            "    ziso -i/--input example.zso\n"
-            "    ziso -i/--input example.zso -o/--output example.iso\n"
-            "Optional options:\n"
-            "    -c/--compression-level 1-12\n"
-            "           Compression level to be used. By default 12.\n"
-            "    -b/--block-size <size>\n"
-            "           The size in bytes of the blocks. By default 2048.\n"
-            "    -r/--replace\n"
-            "           Force to ovewrite the output file\n"
-            "    --mode2-lz4\n"
-            "           Uses an alternative compression method which will reduce the size in some cases.\n"
-            "    --lz4hc\n"
-            "           Uses the LZ4 high compression algorithm to improve the compression ratio.\n"
-            "           NOTE: This will create a non standar ZSO and maybe the decompressor will not be compatible.\n"
-            "    --brute-force\n"
-            "           SLOW: Try to compress using the two LZ4 methods. LZ4HC already selects the best compression method.\n"
-            "    --cache-size <size>\n"
-            "           The size of the cache buffer in MB. By default %d. Memory usage will be the double (%dMB Read + %dMB Write).\n"
-            "    --hdl-fix\n"
-            "           Add a padding in the output file to the nearest upper 2048 bytes multiple (hdl_dump bug fix).\n"
-            "    --log-file\n"
-            "           Set the output log to a file.\n"
-            "    --log-level\n"
-            "           Set the log level between the following levels: trace, debug, info, warn, err, critical, off\n"
-            "    --ignore-header-size\n"
-            "           Ignore the output size stored in the header. Usefull to try to decompress the file even when file size is corrupted.\n"
-            "\n",
-            CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT);
+    std::print(std::cout,
+               "\n\nUsage:\n"
+               "\n"
+               "The program detects ziso sources and selects the decompression mode:\n"
+               "    ziso -i/--input example.iso\n"
+               "    ziso -i/--input example.iso -o/--output example.zso\n"
+               "    ziso -i/--input example.zso\n"
+               "    ziso -i/--input example.zso -o/--output example.iso\n"
+               "Optional options:\n"
+               "    -c/--compression-level 1-12\n"
+               "           Compression level to be used. By default 12.\n"
+               "    -b/--block-size <size>\n"
+               "           The size in bytes of the blocks. By default 2048.\n"
+               "    -r/--replace\n"
+               "           Force to ovewrite the output file\n"
+               "    --mode2-lz4\n"
+               "           Uses an alternative compression method which will reduce the size in some cases.\n"
+               "    --lz4hc\n"
+               "           Uses the LZ4 high compression algorithm to improve the compression ratio.\n"
+               "           NOTE: This will create a non standar ZSO and maybe the decompressor will not be compatible.\n"
+               "    --brute-force\n"
+               "           SLOW: Try to compress using the two LZ4 methods. LZ4HC already selects the best compression method.\n"
+               "    --cache-size <size>\n"
+               "           The size of the cache buffer in MB. By default %d. Memory usage will be the double (%dMB Read + %dMB Write).\n"
+               "    --hdl-fix\n"
+               "           Add a padding in the output file to the nearest upper 2048 bytes multiple (hdl_dump bug fix).\n"
+               "    --log-file\n"
+               "           Set the output log to a file.\n"
+               "    --log-level\n"
+               "           Set the log level between the following levels: trace, debug, info, warn, err, critical, off\n"
+               "    --ignore-header-size\n"
+               "           Ignore the output size stored in the header. Usefull to try to decompress the file even when file size is corrupted.\n"
+               "\n",
+               CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT, CACHE_SIZE_DEFAULT);
 }
 
-static void progress_compress(uint64_t currentInput, uint64_t totalInput, uint64_t currentOutput)
+static void progress_compress(uint64_t currentInput, uint64_t totalInput, uint64_t currentOutput, uint8_t &lastProgress)
 {
     uint8_t progress = (currentInput * 100) / totalInput;
     uint8_t ratio = (currentOutput * 100) / currentInput;
 
     if (lastProgress != progress)
     {
-        fprintf(stdout, "%50s\r", "");
-        fprintf(stdout, "Compressing(%u%%) - Ratio(%u%%)\r", progress, ratio);
+        std::print(std::cout, "%50s\r", "");
+        std::print(std::cout, "Compressing(%u%%) - Ratio(%u%%)\r", progress, ratio);
         fflush(stdout);
         lastProgress = progress;
     }
 }
 
-static void progress_decompress(uint64_t currentInput, uint64_t totalInput)
+static void progress_decompress(uint64_t currentInput, uint64_t totalInput, uint8_t &lastProgress)
 {
     uint8_t progress = (currentInput * 100) / totalInput;
 
     if (lastProgress != progress)
     {
-        fprintf(stdout, "%50s\r", "");
-        fprintf(stdout, "Decompressing(%u%%)\r", progress);
+        std::print(std::cout, "%50s\r", "");
+        std::print(std::cout, "Decompressing(%u%%)\r", progress);
         fflush(stdout);
         lastProgress = progress;
     }
 }
 
-static void show_summary(uint64_t outputSize, opt options)
+static void show_summary(uint64_t outputSize, opt options, summary summaryData)
 {
     uint32_t total_sectors = summaryData.lz4Count + summaryData.lz4m2Count + summaryData.lz4hcCount + summaryData.rawCount;
-    fprintf(stdout, "\n\n");
-    fprintf(stdout, " ZSO compression sumpary\n");
-    fprintf(stdout, "--------------------------------------------------------------\n");
-    fprintf(stdout, " Type                Sectors        In Size          Out Size \n");
-    fprintf(stdout, "--------------------------------------------------------------\n");
+    std::print(std::cout, "\n\n");
+    std::print(std::cout, " ZSO compression sumpary\n");
+    std::print(std::cout, "--------------------------------------------------------------\n");
+    std::print(std::cout, " Type                Sectors        In Size          Out Size \n");
+    std::print(std::cout, "--------------------------------------------------------------\n");
     if (options.bruteForce || (!options.lz4hc && !options.alternativeLz4))
     {
-        fprintf(stdout, "LZ4 ............... %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.lz4Count, MB(summaryData.lz4In), MB(summaryData.lz4Out));
+        std::print(std::cout, "LZ4 ............... %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.lz4Count, MB(summaryData.lz4In), MB(summaryData.lz4Out));
     }
     if (options.bruteForce || (!options.lz4hc && options.alternativeLz4))
     {
-        fprintf(stdout, "LZ4 M2 ............ %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.lz4m2Count, MB(summaryData.lz4m2In), MB(summaryData.lz4m2Out));
+        std::print(std::cout, "LZ4 M2 ............ %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.lz4m2Count, MB(summaryData.lz4m2In), MB(summaryData.lz4m2Out));
     }
     if (!options.bruteForce && options.lz4hc)
     {
-        fprintf(stdout, "LZ4HC ............. %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.lz4hcCount, MB(summaryData.lz4hcIn), MB(summaryData.lz4hcOut));
+        std::print(std::cout, "LZ4HC ............. %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.lz4hcCount, MB(summaryData.lz4hcIn), MB(summaryData.lz4hcOut));
     }
-    fprintf(stdout, "RAW ............... %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.rawCount, MB(summaryData.raw), MB(summaryData.raw));
-    fprintf(stdout, "--------------------------------------------------------------\n");
-    fprintf(stdout, "Total ............. %7lu ...... %7.2fMb ...... %7.2fMb\n", (unsigned long)total_sectors, MB(summaryData.sourceSize), MB(outputSize));
-    fprintf(stdout, "ZSO reduction (input vs ZSO) ...................... %3.2f%%\n", (1.0 - (outputSize / (float)summaryData.sourceSize)) * 100);
-    fprintf(stdout, "\n\n");
+    std::print(std::cout, "RAW ............... %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.rawCount, MB(summaryData.raw), MB(summaryData.raw));
+    std::print(std::cout, "--------------------------------------------------------------\n");
+    std::print(std::cout, "Total ............. %7lu ...... %7.2fMb ...... %7.2fMb\n", (unsigned long)total_sectors, MB(summaryData.sourceSize), MB(outputSize));
+    std::print(std::cout, "ZSO reduction (input vs ZSO) ...................... %3.2f%%\n", (1.0 - (outputSize / (float)summaryData.sourceSize)) * 100);
+    std::print(std::cout, "\n\n");
 }
