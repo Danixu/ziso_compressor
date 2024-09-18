@@ -5,7 +5,7 @@
 
 // Arguments list
 const char *const short_options = "i:o:c:b:rh";
-const struct option long_options[] = {
+const std::vector<option> long_options = {
     // Long and short options
     {"input", required_argument, nullptr, 'i'},
     {"output", required_argument, nullptr, 'o'},
@@ -28,12 +28,9 @@ const struct option long_options[] = {
 // global variales
 uint8_t lastProgress = 100; // Force at 0% of progress
 summary summaryData;
-std::string exeName;
 
 int main(int argc, char **argv)
 {
-    std::filesystem::path p(argv[0]);
-    exeName = p.filename().string();
     // Start the timer to measure execution time
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -90,8 +87,8 @@ int main(int argc, char **argv)
 
     // Check if the file is a ZISO File
     {
-        char file_format[5] = {0};
-        inFile.read(file_format, 4);
+        std::vector<char> file_format(5, 0);
+        inFile.read(file_format.data(), 4);
 
         if (
             file_format[0] == 'Z' &&
@@ -167,7 +164,7 @@ int main(int argc, char **argv)
     spdlog::debug("Option cacheSize: {}", options.cacheSize);
     spdlog::debug("Option overwrite: {}", options.overwrite);
     spdlog::debug("Option logFile: {}", options.logFile);
-    spdlog::debug("Option logLevel: {}", (int)options.logLevel);
+    spdlog::debug("Option logLevel: {}", std::to_underlying(options.logLevel));
     spdlog::debug("Option keepOutput: {}", options.keepOutput);
 
     if (options.compress)
@@ -847,7 +844,7 @@ int get_options(
 
     std::string optarg_s;
 
-    while ((ch = getopt_long(argc, argv, short_options, long_options, nullptr)) != -1)
+    while ((ch = getopt_long(argc, argv, short_options, long_options.data(), nullptr)) != -1)
     {
         // check to see if a single character or long option came through
         switch (ch)

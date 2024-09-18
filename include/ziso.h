@@ -14,7 +14,7 @@
 // The LZ4_ACCELERATION_MAX is defined in the lz4.c file and is about 65537 (now).
 // Testing I have noticed that above 1024 the compression was almost the same, so I'll set the max there.
 constexpr uint16_t LZ4_MAX_ACCELERATION = 1024;
-const uint16_t lz4_compression_level[12] = {
+const std::vector<uint16_t> lz4_compression_level = {
     LZ4_MAX_ACCELERATION,
     uint16_t(LZ4_MAX_ACCELERATION *((float)10 / 11)),
     uint16_t(LZ4_MAX_ACCELERATION *((float)9 / 11)),
@@ -46,7 +46,7 @@ struct zheader
     const uint8_t version = 1;                  // Always 1.
     uint8_t indexShift = 0;                     // Indicates left shift of index values.
     const uint8_t unused[2] = {0, 0};           // Always 0.
-} ziso_header;
+};
 #pragma pack(pop)
 
 struct opt
@@ -67,7 +67,7 @@ struct opt
     spdlog::level::level_enum logLevel = spdlog::level::err;
     bool ignoreHeaderSize = false;
     bool keepOutput = false;
-} opt_struct;
+};
 
 struct summary
 {
@@ -83,7 +83,7 @@ struct summary
     uint64_t lz4hcOut = 0;
     uint64_t rawCount = 0;
     uint64_t raw = 0;
-} summary_struct;
+};
 
 ///////////////////////////////
 //
