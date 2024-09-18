@@ -618,7 +618,7 @@ inline uint32_t compress_block(
     char *dst,
     uint32_t dstSize,
     bool &uncompressed,
-    const opt options,
+    const opt &options,
     summary &summaryData)
 {
     // The source size will be the same always
@@ -950,7 +950,7 @@ int get_options(
                 }
                 else if (temp_argument > CACHE_SIZE_MAX)
                 {
-                    std::print(std::cerr, "\n\nERROR: the provided cache size is not correct. Must be less than %uMB\n\n", CACHE_SIZE_MAX);
+                    std::print(std::cerr, "\n\nERROR: the provided cache size is not correct. Must be less than {}MB\n\n", CACHE_SIZE_MAX);
                     print_help();
                     return 1;
                 }
@@ -1031,8 +1031,6 @@ int get_options(
             options.ignoreHeaderSize = true;
             break;
 
-        case 'h':
-        case '?':
         default:
             print_help();
             return 1;
@@ -1068,7 +1066,7 @@ void print_help()
                "    --brute-force\n"
                "           SLOW: Try to compress using the two LZ4 methods. LZ4HC already selects the best compression method.\n"
                "    --cache-size <size>\n"
-               "           The size of the cache buffer in MB. By default %d. Memory usage will be the double (%dMB Read + %dMB Write).\n"
+               "           The size of the cache buffer in MB. By default {}. Memory usage will be the double ({}MB Read + {}MB Write).\n"
                "    --hdl-fix\n"
                "           Add a padding in the output file to the nearest upper 2048 bytes multiple (hdl_dump bug fix).\n"
                "    --log-file\n"
@@ -1088,9 +1086,9 @@ static void progress_compress(uint64_t currentInput, uint64_t totalInput, uint64
 
     if (lastProgress != progress)
     {
-        std::print(std::cout, "%50s\r", "");
-        std::print(std::cout, "Compressing(%u%%) - Ratio(%u%%)\r", progress, ratio);
-        fflush(stdout);
+        std::print(std::cout, "{:50s}\r", "");
+        std::print(std::cout, "Compressing({}%) - Ratio({}%)\r", progress, ratio);
+        std::flush(std::cout);
         lastProgress = progress;
     }
 }
@@ -1101,36 +1099,36 @@ static void progress_decompress(uint64_t currentInput, uint64_t totalInput, uint
 
     if (lastProgress != progress)
     {
-        std::print(std::cout, "%50s\r", "");
-        std::print(std::cout, "Decompressing(%u%%)\r", progress);
-        fflush(stdout);
+        std::print(std::cout, "{:50s}\r", "");
+        std::print(std::cout, "Decompressing({}%)\r", progress);
+        std::flush(std::cout);
         lastProgress = progress;
     }
 }
 
-static void show_summary(uint64_t outputSize, opt options, summary summaryData)
+static void show_summary(uint64_t outputSize, const opt &options, const summary &summaryData)
 {
     uint32_t total_sectors = summaryData.lz4Count + summaryData.lz4m2Count + summaryData.lz4hcCount + summaryData.rawCount;
     std::print(std::cout, "\n\n");
     std::print(std::cout, " ZSO compression sumpary\n");
-    std::print(std::cout, "--------------------------------------------------------------\n");
-    std::print(std::cout, " Type                Sectors        In Size          Out Size \n");
-    std::print(std::cout, "--------------------------------------------------------------\n");
+    std::print(std::cout, "---------------------------------------------------------------\n");
+    std::print(std::cout, " Type                Sectors         In Size          Out Size \n");
+    std::print(std::cout, "---------------------------------------------------------------\n");
     if (options.bruteForce || (!options.lz4hc && !options.alternativeLz4))
     {
-        std::print(std::cout, "LZ4 ............... %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.lz4Count, MB(summaryData.lz4In), MB(summaryData.lz4Out));
+        std::print(std::cout, " LZ4 ............... {:7d} ...... {:7.2f}MB ...... {:7.2f}MB\n", (unsigned long long)summaryData.lz4Count, MB(summaryData.lz4In), MB(summaryData.lz4Out));
     }
     if (options.bruteForce || (!options.lz4hc && options.alternativeLz4))
     {
-        std::print(std::cout, "LZ4 M2 ............ %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.lz4m2Count, MB(summaryData.lz4m2In), MB(summaryData.lz4m2Out));
+        std::print(std::cout, " LZ4 M2 ............ {:7d} ...... {:7.2f}MB ...... {:7.2f}MB\n", (unsigned long long)summaryData.lz4m2Count, MB(summaryData.lz4m2In), MB(summaryData.lz4m2Out));
     }
     if (!options.bruteForce && options.lz4hc)
     {
-        std::print(std::cout, "LZ4HC ............. %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.lz4hcCount, MB(summaryData.lz4hcIn), MB(summaryData.lz4hcOut));
+        std::print(std::cout, " LZ4HC ............. {:7d} ...... {:7.2f}MB ...... {:7.2f}MB\n", (unsigned long long)summaryData.lz4hcCount, MB(summaryData.lz4hcIn), MB(summaryData.lz4hcOut));
     }
-    std::print(std::cout, "RAW ............... %7llu ...... %7.2fMB ...... %7.2fMB\n", (unsigned long long)summaryData.rawCount, MB(summaryData.raw), MB(summaryData.raw));
-    std::print(std::cout, "--------------------------------------------------------------\n");
-    std::print(std::cout, "Total ............. %7lu ...... %7.2fMb ...... %7.2fMb\n", (unsigned long)total_sectors, MB(summaryData.sourceSize), MB(outputSize));
-    std::print(std::cout, "ZSO reduction (input vs ZSO) ...................... %3.2f%%\n", (1.0 - (outputSize / (float)summaryData.sourceSize)) * 100);
+    std::print(std::cout, " RAW ............... {:7d} ...... {:7.2f}MB ...... {:7.2f}MB\n", (unsigned long long)summaryData.rawCount, MB(summaryData.raw), MB(summaryData.raw));
+    std::print(std::cout, "---------------------------------------------------------------\n");
+    std::print(std::cout, " Total ............. {:7d} ...... {:7.2f}MB ...... {:7.2f}MB\n", (unsigned long)total_sectors, MB(summaryData.sourceSize), MB(outputSize));
+    std::print(std::cout, " ZSO reduction (input vs ZSO) ...................... {:8.2f}%\n", (1.0 - (outputSize / (float)summaryData.sourceSize)) * 100);
     std::print(std::cout, "\n\n");
 }
