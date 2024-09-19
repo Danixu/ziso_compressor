@@ -1,60 +1,61 @@
 #include <stdio.h>
+#include <print>
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void banner(void)
 {
-    printf("ziso - ZSO compressor/decompressor\n"
-           "Created by Daniel Carrasco (2024)\n"
-           "Improved version 0.7.0"
-           " (%d-bit "
+    std::print("ziso - ZSO compressor/decompressor\n"
+               "Created by Daniel Carrasco (2024)\n"
+               "Improved version 0.7.0"
+               " ({:d}-bit "
 
 #if defined(__CYGWIN__)
-           "Windows, Cygwin"
+               "Windows, Cygwin"
 #elif defined(__MINGW32__)
-           "Windows, MinGW"
+               "Windows, MinGW"
 #elif defined(_WIN32) && defined(_MSC_VER) && (defined(__alpha) || defined(__ALPHA) || defined(__Alpha_AXP))
-           "Windows, Digital AXP C"
+               "Windows, Digital AXP C"
 #elif defined(_WIN32) && defined(_MSC_VER) && defined(_M_ALPHA)
-           "Windows, Microsoft C, Alpha"
+               "Windows, Microsoft C, Alpha"
 #elif defined(_WIN32) && defined(_MSC_VER) && defined(_M_MRX000)
-           "Windows, Microsoft C, MIPS"
+               "Windows, Microsoft C, MIPS"
 #elif defined(_WIN32) && defined(_MSC_VER)
-           "Windows, Microsoft C"
+               "Windows, Microsoft C"
 #elif defined(__WIN32__) || defined(_WIN32)
-           "Windows"
+               "Windows"
 #elif defined(__DJGPP__)
-           "DOS, DJGPP"
+               "DOS, DJGPP"
 #elif defined(__MSDOS__) && defined(__TURBOC__)
-           "DOS, Turbo C"
+               "DOS, Turbo C"
 #elif defined(_DOS) && defined(__WATCOMC__)
-           "DOS, Watcom"
+               "DOS, Watcom"
 #elif defined(__MSDOS__) || defined(MSDOS) || defined(_DOS)
-           "DOS"
+               "DOS"
 #elif defined(__APPLE__)
-           "Mac OS"
+               "Mac OS"
 #elif defined(__linux) || defined(__linux__) || defined(__gnu_linux__) || defined(linux)
-           "Linux"
+               "Linux"
 #elif defined(__OpenBSD__)
-           "OpenBSD"
+               "OpenBSD"
 #elif defined(BSD)
-           "BSD"
+               "BSD"
 #elif defined(human68k) || defined(HUMAN68K) || defined(__human68k) || defined(__HUMAN68K) || defined(__human68k__) || defined(__HUMAN68K__)
-           "Human68k"
+               "Human68k"
 #elif defined(__unix__) || defined(__unix) || defined(unix)
-           "unknown Unix"
+               "unknown Unix"
 #else
-           "unknown platform"
+               "unknown platform"
 #endif
 
-           "%s)\n"
-           "  https://www.electrosoftcloud.com/\n"
-           "\n"
-           "  Binary Build date: %s @ %s\n"
-           "\n",
-           (int)(sizeof(size_t) * 8),
-           (sizeof(off_t) > 4 && sizeof(off_t) > sizeof(size_t)) ? ", large file support" : "",
-           __DATE__, __TIME__);
+               "{:s})\n"
+               "  https://www.electrosoftcloud.com/\n"
+               "\n"
+               "  Binary Build date: {:s} @ {:s}\n"
+               "\n",
+               (int)(sizeof(size_t) * 8),
+               (sizeof(off_t) > 4 && sizeof(off_t) > sizeof(size_t)) ? ", large file support" : "",
+               __DATE__, __TIME__);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

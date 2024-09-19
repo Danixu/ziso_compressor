@@ -790,21 +790,21 @@ bool is_cdrom(std::fstream &fIn)
 
     // Read three sectors to ensure that the disk is a CDROM
     std::vector<char> buffer(12, 0);
-    std::vector<unsigned char> cdSync = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00};
+    std::vector<char> cdSync = {(char)0x00, (char)0xFF, (char)0xFF, (char)0xFF, (char)0xFF, (char)0xFF, (char)0xFF, (char)0xFF, (char)0xFF, (char)0xFF, (char)0xFF, (char)0x00};
     for (uint8_t i = 0; i < 3; i++)
     {
         fIn.seekg(i * 2352);
         fIn.read(buffer.data(), buffer.size());
 
-        if (
-            std::strncmp(buffer.data(), (char *)cdSync.data(), 12) != 0)
+        //  Check if they matches
+        if (buffer == cdSync)
         {
             fIn.seekg(currentPos);
-            return false;
+            return true;
         }
     }
     fIn.seekg(currentPos);
-    return true;
+    return false;
 }
 
 void file_align(std::fstream &fOut, uint8_t shift)
