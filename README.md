@@ -24,14 +24,14 @@ There are some things I'd like to do, like for example:
 Clone the repository:
 
 ```
-git clone git@github.com:Danixu/ziso_compressor.git
+git clone https://github.com/Danixu/ziso_compressor.git
 ```
 
 Download the submodules:
 
 ```
 cd ziso_compressor
-git submodules update --init
+git submodule update --init
 ```
 
 Compile the program:
