@@ -14,7 +14,11 @@ endif()
 
 set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
-set(CMAKE_CXX_FLAGS_RELEASE "-O2 -s")
+if(APPLE)
+  set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+else()
+  set(CMAKE_CXX_FLAGS_RELEASE "-O2 -s")
+endif()
 
 # Only do these if this is the main project, and not if it is included through add_subdirectory
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)

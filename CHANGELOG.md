@@ -1,5 +1,17 @@
 # Ziso Changelog
 
+## v0.7.0
+* Removed the blocksize detection because an incompatibility with OPL with blocks bigger than 2048 bytes. I recommend to keep the default configuration.
+* Code quality improvements
+* Updated the spdlog and lz4 compressor versions
+* Added the MacOS binaries
+
+## v0.6.1
+* Added the spdlog library to print the output log.
+* Fixed the Github action build for Windows
+* Moved the Windows version to posix
+* Fixed a bug when the last block doesn't matches the blocksize
+
 ## v0.5.2
 
 * Fixed a bug compressing/decompressing non standard blocksize files, like for example CDROM's (blocksize 2352)
