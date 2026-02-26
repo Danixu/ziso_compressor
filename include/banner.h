@@ -1,11 +1,11 @@
 #include <stdio.h>
-#include <print>
+#include <spdlog/fmt/fmt.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void banner(void)
 {
-    std::print("ziso - ZSO compressor/decompressor\n"
+    fmt::print("ziso - ZSO compressor/decompressor\n"
                "Created by Daniel Carrasco (2024)\n"
                "Improved version 0.7.0"
                " ({:d}-bit "
@@ -49,7 +49,7 @@ void banner(void)
 #endif
 
                "{:s})\n"
-               "  https://www.electrosoftcloud.com/\n"
+               "  https://github.com/Danixu/ziso_compressor\n"
                "\n",
                (int)(sizeof(size_t) * 8),
                (sizeof(off_t) > 4 && sizeof(off_t) > sizeof(size_t)) ? ", large file support" : "");

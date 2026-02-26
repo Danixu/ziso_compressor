@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "spdlog/spdlog.h"
+#include <spdlog/fmt/fmt.h>
 
 // The LZ4_ACCELERATION_MAX is defined in the lz4.c file and is about 65537 (now).
 // Testing I have noticed that above 1024 the compression was almost the same, so I'll set the max there.

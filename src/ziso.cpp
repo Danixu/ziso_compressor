@@ -871,7 +871,7 @@ int get_options(
 
                 if (temp_argument < 1 || temp_argument > 12)
                 {
-                    std::print(std::cerr, "\n\nERROR: the provided compression level option is not correct.\n\n");
+                    fmt::print(stderr, "\n\nERROR: the provided compression level option is not correct.\n\n");
                     print_help();
                     return 1;
                 }
@@ -882,7 +882,7 @@ int get_options(
             }
             catch (std::exception const &e)
             {
-                std::print(std::cerr, "\n\nERROR: the provided compression level is not correct.\n\n");
+                fmt::print(stderr, "\n\nERROR: the provided compression level is not correct.\n\n");
                 print_help();
                 return 1;
             }
@@ -897,7 +897,7 @@ int get_options(
 
                 if (!temp_argument || temp_argument < 512)
                 {
-                    std::print(std::cerr, "\n\nERROR: the provided block size is not correct. Must be at least 512.\n\n");
+                    fmt::print(stderr, "\n\nERROR: the provided block size is not correct. Must be at least 512.\n\n");
                     print_help();
                     return 1;
                 }
@@ -909,7 +909,7 @@ int get_options(
             }
             catch (std::exception const &e)
             {
-                std::print(std::cerr, "\n\nERROR: the provided block size is not correct.\n\n");
+                fmt::print(stderr, "\n\nERROR: the provided block size is not correct.\n\n");
                 print_help();
                 return 1;
             }
@@ -944,19 +944,19 @@ int get_options(
 
                 if (!temp_argument)
                 {
-                    std::print(std::cerr, "\n\nERROR: the provided cache size is not correct.\n\n");
+                    fmt::print(stderr, "\n\nERROR: the provided cache size is not correct.\n\n");
                     print_help();
                     return 1;
                 }
                 else if (temp_argument > CACHE_SIZE_MAX)
                 {
-                    std::print(std::cerr, "\n\nERROR: the provided cache size is not correct. Must be less than {}MB\n\n", CACHE_SIZE_MAX);
+                    fmt::print(stderr, "\n\nERROR: the provided cache size is not correct. Must be less than {}MB\n\n", CACHE_SIZE_MAX);
                     print_help();
                     return 1;
                 }
                 else if (temp_argument < 1)
                 {
-                    std::print(std::cerr, "\n\nERROR: the provided cache size is not correct. Must be at least 1MB\n\n");
+                    fmt::print(stderr, "\n\nERROR: the provided cache size is not correct. Must be at least 1MB\n\n");
                     print_help();
                     return 1;
                 }
@@ -967,7 +967,7 @@ int get_options(
             }
             catch (std::exception const &e)
             {
-                std::print(std::cerr, "\n\nERROR: the provided block size is not correct.\n\n");
+                fmt::print(stderr, "\n\nERROR: the provided block size is not correct.\n\n");
                 print_help();
                 return 1;
             }
@@ -1018,7 +1018,7 @@ int get_options(
             }
             else
             {
-                std::print(std::cerr, "\n\nERROR: The provided log level is incorrect.\n\n");
+                fmt::print(stderr, "\n\nERROR: The provided log level is incorrect.\n\n");
                 print_help();
                 return 1;
             }
@@ -1043,7 +1043,7 @@ int get_options(
 void print_help()
 {
     banner();
-    std::print(std::cout,
+    fmt::print(stdout,
                "\n\nUsage:\n"
                "\n"
                "The program detects ziso sources and selects the decompression mode:\n"
@@ -1086,8 +1086,8 @@ static void progress_compress(uint64_t currentInput, uint64_t totalInput, uint64
 
     if (lastProgress != progress)
     {
-        std::print(std::cout, "{:50s}\r", "");
-        std::print(std::cout, "Compressing({}%) - Ratio({}%)\r", progress, ratio);
+        fmt::print(stdout, "{:50s}\r", "");
+        fmt::print(stdout, "Compressing({}%) - Ratio({}%)\r", progress, ratio);
         std::flush(std::cout);
         lastProgress = progress;
     }
@@ -1099,8 +1099,8 @@ static void progress_decompress(uint64_t currentInput, uint64_t totalInput, uint
 
     if (lastProgress != progress)
     {
-        std::print(std::cout, "{:50s}\r", "");
-        std::print(std::cout, "Decompressing({}%)\r", progress);
+        fmt::print(stdout, "{:50s}\r", "");
+        fmt::print(stdout, "Decompressing({}%)\r", progress);
         std::flush(std::cout);
         lastProgress = progress;
     }
@@ -1109,26 +1109,26 @@ static void progress_decompress(uint64_t currentInput, uint64_t totalInput, uint
 static void show_summary(uint64_t outputSize, const opt &options, const summary &summaryData)
 {
     uint32_t total_sectors = summaryData.lz4Count + summaryData.lz4m2Count + summaryData.lz4hcCount + summaryData.rawCount;
-    std::print(std::cout, "\n\n");
-    std::print(std::cout, " ZSO compression sumpary\n");
-    std::print(std::cout, "---------------------------------------------------------------\n");
-    std::print(std::cout, " Type                Sectors         In Size          Out Size \n");
-    std::print(std::cout, "---------------------------------------------------------------\n");
+    fmt::print(stdout, "\n\n");
+    fmt::print(stdout, " ZSO compression sumpary\n");
+    fmt::print(stdout, "---------------------------------------------------------------\n");
+    fmt::print(stdout, " Type                Sectors         In Size          Out Size \n");
+    fmt::print(stdout, "---------------------------------------------------------------\n");
     if (options.bruteForce || (!options.lz4hc && !options.alternativeLz4))
     {
-        std::print(std::cout, " LZ4 ............... {:7d} ...... {:7.2f}MB ...... {:7.2f}MB\n", (unsigned long long)summaryData.lz4Count, MB(summaryData.lz4In), MB(summaryData.lz4Out));
+        fmt::print(stdout, " LZ4 ............... {:7d} ...... {:7.2f}MB ...... {:7.2f}MB\n", (unsigned long long)summaryData.lz4Count, MB(summaryData.lz4In), MB(summaryData.lz4Out));
     }
     if (options.bruteForce || (!options.lz4hc && options.alternativeLz4))
     {
-        std::print(std::cout, " LZ4 M2 ............ {:7d} ...... {:7.2f}MB ...... {:7.2f}MB\n", (unsigned long long)summaryData.lz4m2Count, MB(summaryData.lz4m2In), MB(summaryData.lz4m2Out));
+        fmt::print(stdout, " LZ4 M2 ............ {:7d} ...... {:7.2f}MB ...... {:7.2f}MB\n", (unsigned long long)summaryData.lz4m2Count, MB(summaryData.lz4m2In), MB(summaryData.lz4m2Out));
     }
     if (!options.bruteForce && options.lz4hc)
     {
-        std::print(std::cout, " LZ4HC ............. {:7d} ...... {:7.2f}MB ...... {:7.2f}MB\n", (unsigned long long)summaryData.lz4hcCount, MB(summaryData.lz4hcIn), MB(summaryData.lz4hcOut));
+        fmt::print(stdout, " LZ4HC ............. {:7d} ...... {:7.2f}MB ...... {:7.2f}MB\n", (unsigned long long)summaryData.lz4hcCount, MB(summaryData.lz4hcIn), MB(summaryData.lz4hcOut));
     }
-    std::print(std::cout, " RAW ............... {:7d} ...... {:7.2f}MB ...... {:7.2f}MB\n", (unsigned long long)summaryData.rawCount, MB(summaryData.raw), MB(summaryData.raw));
-    std::print(std::cout, "---------------------------------------------------------------\n");
-    std::print(std::cout, " Total ............. {:7d} ...... {:7.2f}MB ...... {:7.2f}MB\n", (unsigned long)total_sectors, MB(summaryData.sourceSize), MB(outputSize));
-    std::print(std::cout, " ZSO reduction (input vs ZSO) ...................... {:8.2f}%\n", (1.0 - (outputSize / (float)summaryData.sourceSize)) * 100);
-    std::print(std::cout, "\n\n");
+    fmt::print(stdout, " RAW ............... {:7d} ...... {:7.2f}MB ...... {:7.2f}MB\n", (unsigned long long)summaryData.rawCount, MB(summaryData.raw), MB(summaryData.raw));
+    fmt::print(stdout, "---------------------------------------------------------------\n");
+    fmt::print(stdout, " Total ............. {:7d} ...... {:7.2f}MB ...... {:7.2f}MB\n", (unsigned long)total_sectors, MB(summaryData.sourceSize), MB(outputSize));
+    fmt::print(stdout, " ZSO reduction (input vs ZSO) ...................... {:8.2f}%\n", (1.0 - (outputSize / (float)summaryData.sourceSize)) * 100);
+    fmt::print(stdout, "\n\n");
 }

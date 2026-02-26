@@ -1,8 +1,8 @@
 set(CMAKE_SYSTEM_NAME Darwin)
 set(CMAKE_SYSTEM_PROCESSOR aarch64) # Cambia a x86_64 si compilas para Mac Intel
 
-set(CMAKE_C_COMPILER "/snap/bin/zig;cc")
-set(CMAKE_CXX_COMPILER "/snap/bin/zig;c++")
+set(CMAKE_C_COMPILER "zig;cc")
+set(CMAKE_CXX_COMPILER "zig;c++")
 
 # Target genérico para Mac
 set(TARGET_ARCH "x86_64-macos")

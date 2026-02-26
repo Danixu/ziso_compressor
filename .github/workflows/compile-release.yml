@@ -7,27 +7,96 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 
     steps:
       - uses: actions/checkout@v2
       - name: Install Packages
-        run: sudo apt-get update && sudo apt-get install -y mingw-w64 zip cmake
+        run: |
+          # Update the packages lists
+          sudo apt update
+
+          # Install zig
+          sudo apt install -y wget xz-utils
+          wget https://ziglang.org/builds/zig-x86_64-linux-0.16.0-dev.2565+684032671.tar.xz -O zig.tar.xz
+          tar -xf zig.tar.xz
+          mv zig-x86_64-linux-* /usr/local/zig
+          rm -f zig.tar.xz
+
+          # Install the other requirements
+          sudo apt install -y mingw-w64 zip cmake
+
       - name: Initializing submodules
         run: git submodule update --init
-      - name: Build linux release
-        run: cmake -B . && make
-      - name: Build windows release
-        run: rm -rf CMakeFiles ; rm -rf */CMakeFiles ; rm -rf */*/CMakeFiles && cmake -DCMAKE_TOOLCHAIN_FILE="tc-win64.cmake" -B . && make
-      - name: Set env
+
+      - name: Set the release version env variable
         run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
-      - name: Generate release
+
+      - name: Build linux release
         run: |
+          # Cleanup
+          rm -rf CMakeCache.txt CMakeFiles Makefile cmake_install.cmake CMakeLists.txt.user
+          find . -name "CMakeCache.txt" -type f -delete                                    
+          find . -name "CMakeFiles" -type d -exec rm -rf {} +
+          find . -name "cmake_install.cmake" -type f -delete
+          find . -name "Makefile" -type f -delete
+          # Build
+          cmake -B . && make
+          # Compress the release into a zip file
           cd bin
           zip ziso_${{ env.RELEASE_VERSION }}_linux.zip ziso
+          rm -f ziso
+
+      - name: Build windows release
+        run: |
+          # Cleanup
+          rm -rf CMakeCache.txt CMakeFiles Makefile cmake_install.cmake CMakeLists.txt.user
+          find . -name "CMakeCache.txt" -type f -delete                                    
+          find . -name "CMakeFiles" -type d -exec rm -rf {} +
+          find . -name "cmake_install.cmake" -type f -delete
+          find . -name "Makefile" -type f -delete
+          # Build
+          cmake -DCMAKE_TOOLCHAIN_FILE="tc-win64.cmake" -B . && make
+          # Compress the release into a zip file
+          cd bin
           zip ziso_${{ env.RELEASE_VERSION }}_win64.zip ziso.exe
+          rm -f ziso.exe
+
+      - name: Build the MAC arm64 release
+        run: |
+          # Required path to use the downloaded zig program
+          export PATH="/usr/local/zig:$PATH"
+          # Cleanup
+          rm -rf CMakeCache.txt CMakeFiles Makefile cmake_install.cmake CMakeLists.txt.user
+          find . -name "CMakeCache.txt" -type f -delete                                    
+          find . -name "CMakeFiles" -type d -exec rm -rf {} +
+          find . -name "cmake_install.cmake" -type f -delete
+          find . -name "Makefile" -type f -delete
+          # Build
+          cmake -DCMAKE_TOOLCHAIN_FILE="macos-arm64-toolchain.cmake" -B . && make
+          # Compress the release into a zip file
+          cd bin
+          zip ziso_${{ env.RELEASE_VERSION }}_macos_arm64.zip ziso
+          rm -f ziso
+
+      - name: Build the MAC amd64 release
+        run: |
+          # Required path to use the downloaded zig program
+          export PATH="/usr/local/zig:$PATH"
+          # Cleanup
+          rm -rf CMakeCache.txt CMakeFiles Makefile cmake_install.cmake CMakeLists.txt.user
+          find . -name "CMakeCache.txt" -type f -delete                                    
+          find . -name "CMakeFiles" -type d -exec rm -rf {} +
+          find . -name "cmake_install.cmake" -type f -delete
+          find . -name "Makefile" -type f -delete
+          # Build
+          cmake -DCMAKE_TOOLCHAIN_FILE="macos-amd64-toolchain.cmake" -B . && make
+          # Compress the release into a zip file
+          cd bin
+          zip ziso_${{ env.RELEASE_VERSION }}_macos_amd64.zip ziso
+          rm -f ziso
 
       - name: Upload assets
         uses: marvinpinto/action-automatic-releases@v1.2.1
