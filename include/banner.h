@@ -50,12 +50,9 @@ void banner(void)
 
                "{:s})\n"
                "  https://www.electrosoftcloud.com/\n"
-               "\n"
-               "  Binary Build date: {:s} @ {:s}\n"
                "\n",
                (int)(sizeof(size_t) * 8),
-               (sizeof(off_t) > 4 && sizeof(off_t) > sizeof(size_t)) ? ", large file support" : "",
-               __DATE__, __TIME__);
+               (sizeof(off_t) > 4 && sizeof(off_t) > sizeof(size_t)) ? ", large file support" : "");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
