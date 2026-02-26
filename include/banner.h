@@ -6,7 +6,7 @@
 void banner(void)
 {
     fmt::print("ziso - ZSO compressor/decompressor\n"
-               "Created by Daniel Carrasco (2024)\n"
+               "Created by Daniel Carrasco (2026)\n"
                "Improved version 0.7.0"
                " ({:d}-bit "
 
