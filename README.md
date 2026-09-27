@@ -2,6 +2,8 @@
 
 This ziso compressor is an alternative to the ziso.py compressor that I have found in the OPL repository. It doesn't respect the compression level and doesn't provide LZ4HC compression, so I have decided to create my own compressor.
 
+NOTE: There is a improved version of the compressor here: [Ziso Compressor Rust](https://github.com/Danixu/ziso_compressor_rust)
+
 ## Features
 
 * Allows to set the compression level by using the LZ4 feature called "acceleration".
